@@ -1,0 +1,65 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <base href="/"/>
+    <link rel="stylesheet" href="app.css"/>
+    <link rel="icon" type="image/png" href="favicon.png"/>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.2.0/flowbite.min.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <HeadOutlet/>
+    <title>Blazor App</title>
+</head>
+
+<body>
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    <div class="flex items-center justify-center min-h-screen bg-[#0f1729]">
+                        <div class="text-center">
+                            <h1 class="text-2xl font-bold text-white mb-4">Access Denied</h1>
+                            <p class="text-gray-400 mb-6">You must be logged in to access this page.</p>
+                            <a href="/" class="text-blue-400 hover:text-blue-300">Return to Home</a>
+                        </div>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1"/>
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="typeof(Layout.MainLayout)">
+                <div class="flex items-center justify-center min-h-screen bg-[#0f1729]">
+                    <div class="text-center">
+                        <h1 class="text-2xl font-bold text-white mb-4">Page Not Found</h1>
+                        <p class="text-gray-400 mb-6">Sorry, the page you're looking for doesn't exist.</p>
+                        <a href="/" class="text-blue-400 hover:text-blue-300">Return to Home</a>
+                    </div>
+                </div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: {
+                    sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                },
+            }
+        }
+    }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.2.0/flowbite.min.js"></script>
+<script src="_framework/blazor.web.js"></script>
+</body>
+
+</html>
