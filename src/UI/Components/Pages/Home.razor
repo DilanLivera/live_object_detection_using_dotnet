@@ -1,6 +1,9 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 @inject IJSRuntime JsRuntime
+@inject ILogger<Home> Logger
+@inject ObjectDetector ObjectDetector
+@implements IAsyncDisposable
 
 <PageTitle>Home</PageTitle>
 
@@ -25,13 +28,16 @@
 
 <div class="relative max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl bg-gray-800/50 backdrop-blur-sm 
                     border border-gray-700/50">
-    <div class="aspect-w-16 aspect-h-9">
+    <div class="aspect-w-16 aspect-h-9 relative">
         <video id="cameraFeed"
-               autoplay="autoplay"
+               autoplay
                playsinline
                muted
-               class="w-full h-full object-cover">
+               class="absolute top-0 left-0 w-full h-full object-cover">
         </video>
+        <canvas id="detectionOverlay"
+                class="absolute top-0 left-0 w-full h-full pointer-events-none">
+        </canvas>
     </div>
     @if (_isCameraActive)
     {
@@ -47,6 +53,10 @@
 @code {
     private string? _error;
     private bool _isCameraActive;
+    private PeriodicTimer? _detectionTimer;
+    private const int DetectionIntervalMs = 100;
+    private int _consecutiveFailures = 0; // Track failures to prevent endless retry loops when connection is unstable
+    private const int MaxConsecutiveFailures = 3;
 
     private async Task ToggleCamera()
     {
@@ -64,6 +74,8 @@
     {
         try
         {
+            // Reset failure counter on fresh start to give clean slate
+            _consecutiveFailures = 0;
             var result = await JsRuntime.InvokeAsync<bool>("CameraManager.initializeCamera", "cameraFeed");
             if (!result)
             {
@@ -73,6 +85,9 @@
 
             _error = null;
             _isCameraActive = true;
+
+            _detectionTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(DetectionIntervalMs));
+            _ = RunDetectionLoop();
         }
         catch (Exception ex)
         {
@@ -84,7 +99,14 @@
     {
         try
         {
+            if (_detectionTimer != null)
+            {
+                _detectionTimer.Dispose();
+                _detectionTimer = null;
+            }
+
             await JsRuntime.InvokeVoidAsync("CameraManager.stopCamera", "cameraFeed");
+            await JsRuntime.InvokeVoidAsync("CameraManager.clearCanvas", "detectionOverlay");
             _isCameraActive = false;
             _error = null;
         }
@@ -92,6 +114,123 @@
         {
             _error = $"Error stopping camera: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// Generates fake detection data to test the visualization and UI components.
+    /// This is only to be used during the development.
+    /// </summary>
+    private DetectionResult[] GenerateFakeDetections()
+    {
+        Random random = new();
+        string[] sampleLabels = ["person", "car", "dog", "cat", "chair", "bottle"];
+
+        // Generate 1-3 random detections
+        var count = random.Next(1, 4);
+        var detections = new DetectionResult[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            // Random position and size (as percentage of image)
+            var x = (float)random.NextDouble() * 0.7f; // Keep within 70% of width
+            var y = (float)random.NextDouble() * 0.7f; // Keep within 70% of height
+            var width = (float)random.NextDouble() * 0.3f + 0.1f; // 10-40% of image width
+            var height = (float)random.NextDouble() * 0.3f + 0.1f; // 10-40% of image height
+
+            detections[i] = new DetectionResult
+            {
+                Label = sampleLabels[random.Next(sampleLabels.Length)],
+                Confidence = (float)random.NextDouble() * 0.5f + 0.5f, // 50-100% confidence
+                Box = new Box
+                {
+                    X = x,
+                    Y = y,
+                    Width = width,
+                    Height = height
+                }
+            };
+        }
+
+        return detections;
+    }
+
+    private async Task RunDetectionLoop()
+    {
+        try
+        {
+            if (_detectionTimer == null) return;
+
+            while (await _detectionTimer.WaitForNextTickAsync())
+            {
+                try
+                {
+                    // Stop processing if connection is consistently unreliable
+                    if (_consecutiveFailures >= MaxConsecutiveFailures)
+                    {
+                        Logger.LogWarning("Too many consecutive failures, stopping camera");
+                        await StopCamera();
+                        _error = "Connection unstable. Please try again.";
+                        break;
+                    }
+
+                    var image = await JsRuntime.InvokeAsync<byte[]>("CameraManager.captureFrame", "cameraFeed");
+
+                    if (image.Length == 0)
+                    {
+                        Logger.LogWarning("Failed to capture frame: No image data received");
+                        _consecutiveFailures++;
+                        continue;
+                    }
+
+                    // Logger.LogInformation("Received image data: {Size} bytes", image.Length);
+
+                    // Allow recovery from temporary connection issues
+                    _consecutiveFailures = 0;
+
+                    // Generate and draw fake detections
+                    // var fakeDetections = GenerateFakeDetections();
+                    var detections = await ObjectDetector.DetectObjectsAsync(image);
+
+                    // Logger.LogDebug("Generated {DetectionCount} detections", detections.Length);
+                    await JsRuntime.InvokeVoidAsync("CameraManager.drawDetections", "detectionOverlay", detections);
+
+                    // Add a small delay between captures
+                    await Task.Delay(100);
+                }
+                catch (TaskCanceledException)
+                {
+                    // Track SignalR timeouts to detect persistent connection problems
+                    _consecutiveFailures++;
+                    Logger.LogWarning(
+                        "Frame capture was canceled (attempt {Attempt} of {Max})",
+                        _consecutiveFailures, MaxConsecutiveFailures);
+                }
+                catch (Exception ex)
+                {
+                    // Include other errors in failure tracking for overall stability
+                    _consecutiveFailures++;
+                    Logger.LogError(
+                        ex,
+                        "Detection error (attempt {Attempt} of {Max})",
+                        _consecutiveFailures, MaxConsecutiveFailures);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Detection loop error: {ex.Message}";
+            await StopCamera();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_detectionTimer is not null)
+        {
+            _detectionTimer.Dispose();
+        }
+
+        await StopCamera();
     }
 
 }

@@ -9,6 +9,14 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="8.0.1"/>
+        <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.21.0"/>
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Models\**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
 </Project>

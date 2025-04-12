@@ -73,15 +73,144 @@ Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
 
 ![Component Diagram](https://github.com/user-attachments/assets/ca6e16f1-d445-4045-bd4d-90e70270c918)
 
-## Where to download the models?
+## How to run the application
 
-1. **ONNX Model Zoo**  
-   The official ONNX Model Zoo is a collection of pre-trained models for various tasks, including object detection. You can find several detection models that have been converted to ONNX here.  
-   [ONNX Model Zoo](https://github.com/onnx/models/tree/main/vision/object_detection_segmentation)
+### Prerequisites
 
-2. **Ultralytics YOLOv5**  
-   YOLOv5 from Ultralytics is one of the most popular object detection models. Although it’s primarily developed in PyTorch, you can export the model to ONNX. You can either download the model checkpoint from their GitHub repository and convert it yourself or look for community versions already exported.  
-   [Ultralytics YOLOv5 GitHub](https://github.com/ultralytics/yolov5)
+1. .NET SDK: If necessary, download and install the .NET SDK from the [Download .NET](https://dotnet.microsoft.com/download) page. Please refer to the [UI.csproj](https://github.com/DilanLivera/live_object_detection_using_dotnet/blob/main/src/UI/UI.csproj) file to find the SDK version.
 
-3. **Other Public Repositories**  
-   Repositories like [Model Zoo for ONNX](https://github.com/onnx/models) often include additional object detection models (such as SSD or Faster R-CNN variants) available in ONNX format.
+2. Camera Support: The application requires a webcam for video input.
+
+### Setup
+
+1. Clone the Repository
+
+   ```bash
+   git clone https://github.com/DilanLivera/live_object_detection_using_dotnet
+   cd live_object_detection_using_dotnet
+   ```
+
+2. Download Required Files
+
+   a. ONNX Model
+
+    - Create a `Models` directory in the `src/UI` folder if it does not exists.
+    - Download the "Tiny YOLOv3" model from the [ONNX Model](https://github.com/onnx/models/blob/main/validated/vision/object_detection_segmentation/tiny-yolov3/model/tiny-yolov3-11.onnx) page to the `src/UI/Models` directory. Please make sure the model file name is `tiny-yolov3-11.onnx`. The input and output requirements depend on the version of the model. Because of this, we can't use a model that is different from the current implementation.
+
+   b. COCO Labels File
+
+   The coco.names file is essential because it maps numerical class indices output by the YOLO model to human-readable labels. The YOLO v3 model can detect 80 different classes. When the model detects an object, it outputs a number (0-79) corresponding to its class. The position (line number) in coco.names match these indices exactly - for example, if the model outputs "39", the code looks up the 40th line in coco.names to find "bottle". This order must be preserved exactly as the model was trained, or objects will be mislabeled. Without this file, users would see meaningless numbers instead of object names like "person" or "car".
+
+   Either create a file named `coco.names` in the `src/UI/Models` directory and add the following content to the file, or you can download it from [here](https://github.com/qqwweee/keras-yolo3/blob/master/model_data/coco_classes.txt).
+
+    ```
+    person
+    bicycle
+    car
+    motorcycle
+    airplane
+    bus
+    train
+    truck
+    boat
+    traffic light
+    fire hydrant
+    stop sign
+    parking meter
+    bench
+    bird
+    cat
+    dog
+    horse
+    sheep
+    cow
+    elephant
+    bear
+    zebra
+    giraffe
+    backpack
+    umbrella
+    handbag
+    tie
+    suitcase
+    frisbee
+    skis
+    snowboard
+    sports ball
+    kite
+    baseball bat
+    baseball glove
+    skateboard
+    surfboard
+    tennis racket
+    bottle
+    wine glass
+    cup
+    fork
+    knife
+    spoon
+    bowl
+    banana
+    apple
+    sandwich
+    orange
+    broccoli
+    carrot
+    hot dog
+    pizza
+    donut
+    cake
+    chair
+    couch
+    potted plant
+    bed
+    dining table
+    toilet
+    tv
+    laptop
+    mouse
+    remote
+    keyboard
+    cell phone
+    microwave
+    oven
+    toaster
+    sink
+    refrigerator
+    book
+    clock
+    vase
+    scissors
+    teddy bear
+    hair drier
+    toothbrush
+    ```
+
+### Running the Application
+
+1. Start the Application
+
+   ```bash
+   cd src/UI
+   dotnet run
+   ```
+
+2. Access the Web Interface
+
+    - Open your web browser and navigate to `http://localhost:5013`
+    - Allow camera access when prompted by the browser
+
+3. Start Camera
+
+    - Click the "Start Camera" button to initialize your webcam
+    - The video feed should appear in the main window
+
+4. Object Detection: The application automatically detects objects once the Camera is active. It highlights the detected objects with bounding boxes. Each detection includes a label and confidence score.
+
+### Troubleshooting
+
+#### Model Loading Issues
+
+- Verify that the model files are correctly placed in the `src/UI/Models` directory
+- Check the application logs for any specific error messages
+- Ensure the model file name match `tiny-yolov3-11.onnx`.

@@ -1,12 +1,16 @@
-using UI.Components;
-
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 
-WebApplicationBuilder? builder = WebApplication.CreateBuilder(args);
+using UI;
+using UI.Components;
+
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<ObjectDetector>();
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
