@@ -60,3 +60,16 @@ Rel(system, camera, "Captures live video from", "JavaScript/MediaDevices API")
 Rel(system, db, "Saves detection results to", "Entity Framework Core / SQL")
 @enduml
 ```
+
+## Where to download the models?
+
+1. **ONNX Model Zoo**  
+   The official ONNX Model Zoo is a collection of pre-trained models for various tasks, including object detection. You can find several detection models that have been converted to ONNX here.  
+   [ONNX Model Zoo](https://github.com/onnx/models/tree/main/vision/object_detection_segmentation)
+
+2. **Ultralytics YOLOv5**  
+   YOLOv5 from Ultralytics is one of the most popular object detection models. Although it’s primarily developed in PyTorch, you can export the model to ONNX. You can either download the model checkpoint from their GitHub repository and convert it yourself or look for community versions already exported.  
+   [Ultralytics YOLOv5 GitHub](https://github.com/ultralytics/yolov5)
+
+3. **Other Public Repositories**  
+   Repositories like [Model Zoo for ONNX](https://github.com/onnx/models) often include additional object detection models (such as SSD or Faster R-CNN variants) available in ONNX format.
