@@ -6,23 +6,27 @@ A web application to detect objects live using .NET.
 
 The following is an initial design that was generated using Gen AI.
 
+### System Context Diagram
+
 ```plantuml
-@startuml ComponentDiagram
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+@startuml SystemContextDiagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
 
-Container(blazor, "Blazor Server App", "ASP.NET Core", "The main application handling UI, business logic, and coordination.")
+Person(user, "User", "An end-user interacting with the Object Detection system via a web browser.")
+System(system, "Object Detection Web Application", "A Blazor Server application that performs real-time object detection on a live video feed.")
 
-Component(videoCapture, "Video Capture Component", "JavaScript & Blazor JS Interop", "Handles accessing the built-in camera and capturing video frames.")
-Component(objectDetection, "Object Detection Service", "C#", "Processes captured frames using ONNX Runtime to perform model inference.")
-Component(dataPersistence, "Data Persistence", "Entity Framework Core", "Manages storage and retrieval of detection results from the database.")
-Component(realTimeComms, "Real-Time Communication (SignalR Hub)", "C#", "Pushes detection results to the client UI in real time.")
+System_Ext(camera, "Built-in Camera", "The laptop's camera used to capture live video.")
+System_Ext(db, "Detection Database", "Stores detection results (including confidence scores).")
 
-Rel(videoCapture, objectDetection, "Sends captured frames for processing")
-Rel(objectDetection, dataPersistence, "Persists detection results")
-Rel(objectDetection, realTimeComms, "Pushes detection results via")
-Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
+Rel(user, system, "Uses")
+Rel(system, camera, "Captures live video from", "JavaScript/MediaDevices API")
+Rel(system, db, "Saves detection results to", "Entity Framework Core / SQL")
 @enduml
 ```
+
+![SystemC context Diagram](https://github.com/user-attachments/assets/529aa1da-95c8-437f-b444-6987352ff87a)
+
+### Container Diagram
 
 ```plantuml
 @startuml ContainerDiagram
@@ -45,21 +49,29 @@ Rel(detService, db, "Persists detection results", "Entity Framework Core")
 @enduml
 ```
 
+![Container Diagram](https://github.com/user-attachments/assets/3e29b48b-7bac-4d54-b614-7d6315b7941c)
+
+### Component Diagram
+
 ```plantuml
-@startuml SystemContextDiagram
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+@startuml ComponentDiagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
-Person(user, "User", "An end-user interacting with the Object Detection system via a web browser.")
-System(system, "Object Detection Web Application", "A Blazor Server application that performs real-time object detection on a live video feed.")
+Container(blazor, "Blazor Server App", "ASP.NET Core", "The main application handling UI, business logic, and coordination.")
 
-System_Ext(camera, "Built-in Camera", "The laptop's camera used to capture live video.")
-System_Ext(db, "Detection Database", "Stores detection results (including confidence scores).")
+Component(videoCapture, "Video Capture Component", "JavaScript & Blazor JS Interop", "Handles accessing the built-in camera and capturing video frames.")
+Component(objectDetection, "Object Detection Service", "C#", "Processes captured frames using ONNX Runtime to perform model inference.")
+Component(dataPersistence, "Data Persistence", "Entity Framework Core", "Manages storage and retrieval of detection results from the database.")
+Component(realTimeComms, "Real-Time Communication (SignalR Hub)", "C#", "Pushes detection results to the client UI in real time.")
 
-Rel(user, system, "Uses")
-Rel(system, camera, "Captures live video from", "JavaScript/MediaDevices API")
-Rel(system, db, "Saves detection results to", "Entity Framework Core / SQL")
+Rel(videoCapture, objectDetection, "Sends captured frames for processing")
+Rel(objectDetection, dataPersistence, "Persists detection results")
+Rel(objectDetection, realTimeComms, "Pushes detection results via")
+Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
 @enduml
 ```
+
+![Component Diagram](https://github.com/user-attachments/assets/ca6e16f1-d445-4045-bd4d-90e70270c918)
 
 ## Where to download the models?
 
