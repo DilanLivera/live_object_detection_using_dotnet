@@ -1,6 +1,4 @@
-﻿@using Microsoft.AspNetCore.Components.Authorization
-
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -17,38 +15,8 @@
 </head>
 
 <body>
-<Routes @rendermode="InteractiveServer" />
+<Routes/>
 
-<CascadingAuthenticationState>
-    <Router AppAssembly="typeof(Program).Assembly">
-        <Found Context="routeData">
-            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
-                <NotAuthorized>
-                    <div class="flex items-center justify-center min-h-screen bg-[#0f1729]">
-                        <div class="text-center">
-                            <h1 class="text-2xl font-bold text-white mb-4">Access Denied</h1>
-                            <p class="text-gray-400 mb-6">You must be logged in to access this page.</p>
-                            <a href="/" class="text-blue-400 hover:text-blue-300">Return to Home</a>
-                        </div>
-                    </div>
-                </NotAuthorized>
-            </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="routeData" Selector="h1"/>
-        </Found>
-        <NotFound>
-            <PageTitle>Not found</PageTitle>
-            <LayoutView Layout="typeof(Layout.MainLayout)">
-                <div class="flex items-center justify-center min-h-screen bg-[#0f1729]">
-                    <div class="text-center">
-                        <h1 class="text-2xl font-bold text-white mb-4">Page Not Found</h1>
-                        <p class="text-gray-400 mb-6">Sorry, the page you're looking for doesn't exist.</p>
-                        <a href="/" class="text-blue-400 hover:text-blue-300">Return to Home</a>
-                    </div>
-                </div>
-            </LayoutView>
-        </NotFound>
-    </Router>
-</CascadingAuthenticationState>
 <script>
     tailwind.config = {
         theme: {
@@ -60,8 +28,11 @@
         }
     }
 </script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.2.0/flowbite.min.js"></script>
-<script src="_framework/blazor.web.js"></script>
+<script src="_framework/blazor.server.js"></script>
+<script src="js/camera.js"></script>
+
 </body>
 
 </html>
