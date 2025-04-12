@@ -1,11 +1,107 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@inject IJSRuntime JsRuntime
 
 <PageTitle>Home</PageTitle>
 
-<div class="p-8">
-    <div class="max-w-5xl mx-auto text-center mb-16">
-        <h1 class="text-4xl md:text-5xl font-bold text-white mb-6 outline-none">
-            Welcome to Object Detector
-        </h1>
-    </div>
+<div class="text-center mb-12">
+    <p class="text-gray-400 text-lg mb-8">
+        Real-time object detection using camera
+    </p>
+    @if (_error != null)
+    {
+        <div class="mx-auto max-w-lg p-4 mb-6 rounded-lg bg-red-900/50 border border-red-500/50">
+            <p class="text-red-200">@_error</p>
+        </div>
+    }
+    <button @onclick="ToggleCamera"
+            class="px-8 py-3 text-lg font-medium rounded-full text-white transition-all duration-200 
+                           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900
+                           @(_isCameraActive ? "bg-gray-700 hover:bg-gray-600 focus:ring-gray-500" : "bg-gray-600 hover:bg-gray-500 focus:ring-gray-400")
+                           transform hover:scale-105">
+        @(_isCameraActive ? "Stop Camera" : "Start Camera")
+    </button>
 </div>
+
+<div class="relative max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl bg-gray-800/50 backdrop-blur-sm 
+                    border border-gray-700/50">
+    <div class="aspect-w-16 aspect-h-9">
+        <video id="cameraFeed"
+               autoplay="autoplay"
+               playsinline
+               muted
+               class="w-full h-full object-cover">
+        </video>
+    </div>
+    @if (_isCameraActive)
+    {
+        <div class="absolute top-4 right-4">
+            <div class="flex items-center space-x-2 bg-gray-900/70 rounded-full px-3 py-1.5 backdrop-blur-sm">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span class="text-xs text-gray-300 font-medium">Live</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string? _error;
+    private bool _isCameraActive;
+
+    private async Task ToggleCamera()
+    {
+        if (_isCameraActive)
+        {
+            await StopCamera();
+        }
+        else
+        {
+            await StartCamera();
+        }
+    }
+
+    private async Task StartCamera()
+    {
+        try
+        {
+            var result = await JsRuntime.InvokeAsync<bool>("CameraManager.initializeCamera", "cameraFeed");
+            if (!result)
+            {
+                _error = "Failed to initialize camera. Please ensure camera permissions are granted.";
+                return;
+            }
+
+            _error = null;
+            _isCameraActive = true;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task StopCamera()
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("CameraManager.stopCamera", "cameraFeed");
+            _isCameraActive = false;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error stopping camera: {ex.Message}";
+        }
+    }
+
+}
+
+<style>
+    /*
+        Without a fixed aspect ratio container, the video would stretch and distort when the browser window is resized.
+        The 16:9 ratio matches most modern webcam outputs and provides a consistent viewing experience.
+     */
+    .aspect-w-16 { position: relative; padding-bottom: calc(var(--tw-aspect-h) / var(--tw-aspect-w) * 100%); }
+    .aspect-w-16 > * { position: absolute; height: 100%; width: 100%; top: 0; right: 0; bottom: 0; left: 0; }
+    .aspect-h-9 { --tw-aspect-h: 9; --tw-aspect-w: 16; }
+</style>
