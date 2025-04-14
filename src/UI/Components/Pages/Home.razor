@@ -17,17 +17,15 @@
             <p class="text-red-200">@_error</p>
         </div>
     }
-    <button @onclick="ToggleCamera"
-            class="px-8 py-3 text-lg font-medium rounded-full text-white transition-all duration-200 
-                           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900
-                           @(_isCameraActive ? "bg-gray-700 hover:bg-gray-600 focus:ring-gray-500" : "bg-gray-600 hover:bg-gray-500 focus:ring-gray-400")
-                           transform hover:scale-105">
+    <button @onclick="ToggleCameraAsync"
+            class="px-8 py-3 text-lg font-medium rounded-full text-white transition-all duration-200
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 transform hover:scale-105 hover:bg-gray-600 
+                    @(_isCameraActive ? "bg-red-500" : "bg-green-500")">
         @(_isCameraActive ? "Stop Camera" : "Start Camera")
     </button>
 </div>
 
-<div class="relative max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl bg-gray-800/50 backdrop-blur-sm 
-                    border border-gray-700/50">
+<div class="relative max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl bg-gray-800/50 backdrop-blur-sm border border-gray-700/50">
     <div class="aspect-w-16 aspect-h-9 relative">
         <video id="cameraFeed"
                autoplay
@@ -58,26 +56,32 @@
     private int _consecutiveFailures = 0; // Track failures to prevent endless retry loops when connection is unstable
     private const int MaxConsecutiveFailures = 3;
 
-    private async Task ToggleCamera()
+    /// <summary>
+    /// Toggles camera state between active and inactive.
+    /// </summary>
+    private async Task ToggleCameraAsync()
     {
         if (_isCameraActive)
         {
-            await StopCamera();
+            await StopCameraAsync();
         }
         else
         {
-            await StartCamera();
+            await StartCameraAsync();
         }
     }
 
-    private async Task StartCamera()
+    /// <summary>
+    /// Starts camera feed and object detection loop.
+    /// </summary>
+    private async Task StartCameraAsync()
     {
         try
         {
             // Reset failure counter on fresh start to give clean slate
             _consecutiveFailures = 0;
-            var result = await JsRuntime.InvokeAsync<bool>("CameraManager.initializeCamera", "cameraFeed");
-            if (!result)
+            var isCameraInitialized = await JsRuntime.InvokeAsync<bool>(identifier: "CameraManager.initializeCamera", args: "cameraFeed");
+            if (!isCameraInitialized)
             {
                 _error = "Failed to initialize camera. Please ensure camera permissions are granted.";
                 return;
@@ -86,8 +90,8 @@
             _error = null;
             _isCameraActive = true;
 
-            _detectionTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(DetectionIntervalMs));
-            _ = RunDetectionLoop();
+            _detectionTimer = new PeriodicTimer(period: TimeSpan.FromMilliseconds(DetectionIntervalMs));
+            _ = RunDetectionLoopAsync();
         }
         catch (Exception ex)
         {
@@ -95,18 +99,20 @@
         }
     }
 
-    private async Task StopCamera()
+    /// <summary>
+    /// Stops camera feed and cleans up resources.
+    /// </summary>
+    private async Task StopCameraAsync()
     {
         try
         {
-            if (_detectionTimer != null)
+            if (_detectionTimer is not null)
             {
                 _detectionTimer.Dispose();
-                _detectionTimer = null;
             }
 
-            await JsRuntime.InvokeVoidAsync("CameraManager.stopCamera", "cameraFeed");
-            await JsRuntime.InvokeVoidAsync("CameraManager.clearCanvas", "detectionOverlay");
+            await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.stopCamera", args: "cameraFeed");
+            await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.clearCanvas", args: "detectionOverlay");
             _isCameraActive = false;
             _error = null;
         }
@@ -117,44 +123,9 @@
     }
 
     /// <summary>
-    /// Generates fake detection data to test the visualization and UI components.
-    /// This is only to be used during the development.
+    /// Runs object detection loop when the camera is active.
     /// </summary>
-    private DetectionResult[] GenerateFakeDetections()
-    {
-        Random random = new();
-        string[] sampleLabels = ["person", "car", "dog", "cat", "chair", "bottle"];
-
-        // Generate 1-3 random detections
-        var count = random.Next(1, 4);
-        var detections = new DetectionResult[count];
-
-        for (var i = 0; i < count; i++)
-        {
-            // Random position and size (as percentage of image)
-            var x = (float)random.NextDouble() * 0.7f; // Keep within 70% of width
-            var y = (float)random.NextDouble() * 0.7f; // Keep within 70% of height
-            var width = (float)random.NextDouble() * 0.3f + 0.1f; // 10-40% of image width
-            var height = (float)random.NextDouble() * 0.3f + 0.1f; // 10-40% of image height
-
-            detections[i] = new DetectionResult
-            {
-                Label = sampleLabels[random.Next(sampleLabels.Length)],
-                Confidence = (float)random.NextDouble() * 0.5f + 0.5f, // 50-100% confidence
-                Box = new Box
-                {
-                    X = x,
-                    Y = y,
-                    Width = width,
-                    Height = height
-                }
-            };
-        }
-
-        return detections;
-    }
-
-    private async Task RunDetectionLoop()
+    private async Task RunDetectionLoopAsync()
     {
         try
         {
@@ -168,12 +139,12 @@
                     if (_consecutiveFailures >= MaxConsecutiveFailures)
                     {
                         Logger.LogWarning("Too many consecutive failures, stopping camera");
-                        await StopCamera();
+                        await StopCameraAsync();
                         _error = "Connection unstable. Please try again.";
                         break;
                     }
 
-                    var image = await JsRuntime.InvokeAsync<byte[]>("CameraManager.captureFrame", "cameraFeed");
+                    var image = await JsRuntime.InvokeAsync<byte[]>(identifier: "CameraManager.captureFrame", args: "cameraFeed");
 
                     if (image.Length == 0)
                     {
@@ -192,10 +163,7 @@
                     var detections = await ObjectDetector.DetectObjectsAsync(image);
 
                     // Logger.LogDebug("Generated {DetectionCount} detections", detections.Length);
-                    await JsRuntime.InvokeVoidAsync("CameraManager.drawDetections", "detectionOverlay", detections);
-
-                    // Add a small delay between captures
-                    await Task.Delay(100);
+                    await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", detections);
                 }
                 catch (TaskCanceledException)
                 {
@@ -207,7 +175,6 @@
                 }
                 catch (Exception ex)
                 {
-                    // Include other errors in failure tracking for overall stability
                     _consecutiveFailures++;
                     Logger.LogError(
                         ex,
@@ -219,7 +186,7 @@
         catch (Exception ex)
         {
             _error = $"Detection loop error: {ex.Message}";
-            await StopCamera();
+            await StopCameraAsync();
         }
     }
 
@@ -230,7 +197,7 @@
             _detectionTimer.Dispose();
         }
 
-        await StopCamera();
+        await StopCameraAsync();
     }
 
 }
