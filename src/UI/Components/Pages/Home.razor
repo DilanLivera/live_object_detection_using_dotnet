@@ -135,7 +135,6 @@
             {
                 try
                 {
-                    // Stop processing if connection is consistently unreliable
                     if (_consecutiveFailures >= MaxConsecutiveFailures)
                     {
                         Logger.LogWarning("Too many consecutive failures, stopping camera");
@@ -153,8 +152,6 @@
                         continue;
                     }
 
-                    // Logger.LogInformation("Received image data: {Size} bytes", image.Length);
-
                     // Allow recovery from temporary connection issues
                     _consecutiveFailures = 0;
 
@@ -162,8 +159,7 @@
                     // var fakeDetections = GenerateFakeDetections();
                     var detections = await ObjectDetector.DetectObjectsAsync(image);
 
-                    // Logger.LogDebug("Generated {DetectionCount} detections", detections.Length);
-                    await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", detections);
+                    await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", "cameraFeed", detections);
                 }
                 catch (TaskCanceledException)
                 {
