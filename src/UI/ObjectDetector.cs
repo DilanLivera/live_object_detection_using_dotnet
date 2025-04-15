@@ -18,7 +18,6 @@ public class ObjectDetector : IDisposable
     private readonly ILogger<ObjectDetector> _logger;
     private readonly InferenceSession _session;
     private readonly string[] _labels;
-    private const int ImageSize = 416; // Tiny YOLOv3 default input size
     private const float ConfidenceThreshold = 0.25f;
     private const float IntersectionOverUnionThreshold = 0.45f;
 
@@ -32,7 +31,9 @@ public class ObjectDetector : IDisposable
         string modelPath = Path.Combine(environment.ContentRootPath, "Models", "tiny-yolov3-11.onnx");
         if (!File.Exists(modelPath))
         {
-            throw new FileNotFoundException("Model file not found. Please ensure 'tiny-yolov3-11.onnx' is in the 'src/UI/Models' directory.", modelPath);
+            throw new FileNotFoundException(
+                "Model file not found. Please ensure 'tiny-yolov3-11.onnx' is in the 'src/UI/Models' directory.",
+                fileName: modelPath);
         }
 
         _session = new InferenceSession(modelPath);
@@ -54,10 +55,6 @@ public class ObjectDetector : IDisposable
         }
 
         string labelsPath = Path.Combine(environment.ContentRootPath, "Models", "coco.names");
-        if (!File.Exists(labelsPath))
-        {
-            throw new FileNotFoundException("Labels file not found. Please ensure 'coco.names' is in the 'src/UI/Models' directory.", labelsPath);
-        }
 
         _labels = File.ReadAllLines(labelsPath);
     }
@@ -71,21 +68,17 @@ public class ObjectDetector : IDisposable
     {
         using Image<Rgb24> image = Image.Load<Rgb24>(imageData);
 
-        // Preprocess the image to match model input requirements
-        Tensor<float> tensor = PreprocessImage(image);
+        const int imageSize = 416; // Tiny YOLOv3 default input size
+        using Image<Rgb24> resizedAndPaddedImage = ResizeAndPadImage(image, imageSize);
+        Tensor<float> modelInputTensor = CreateTensor(resizedAndPaddedImage, imageSize);
 
-        // A tensor is a mathematical object that can represent multidimensional arrays of data
-        // Create image_shape tensor required by the model
-        // Shape [1,2] represents batch size of 1 and 2 values for height,width
-        DenseTensor<float> imageShape = new(new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
+        DenseTensor<float> imageShapeTensor = new(dimensions: new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
 
-        // Create input tensors with correct names as expected by the model
-        // 'input_1': preprocessed image tensor
-        // 'image_shape': original image dimensions for post-processing
+        // Create inputs with correct names as expected by the model
         List<NamedOnnxValue> inputs =
         [
-            NamedOnnxValue.CreateFromTensor(name: "input_1", tensor),
-            NamedOnnxValue.CreateFromTensor(name: "image_shape", imageShape)
+            NamedOnnxValue.CreateFromTensor(name: "input_1", modelInputTensor),
+            NamedOnnxValue.CreateFromTensor(name: "image_shape", imageShapeTensor)
         ];
 
         // Run() is used instead of RunAsync() because the model inference is CPU-bound and doesn't benefit from async execution
@@ -97,74 +90,72 @@ public class ObjectDetector : IDisposable
     }
 
     /// <summary>
-    /// Preprocesses the input image to match the model's requirements.
-    /// Includes resizing, padding, and pixel normalization.
+    /// Resize the image to fit within the target dimensions while maintaining the aspect ratio and add padding to centre the image to the required size.
     /// </summary>
-    // TODO: add what this method is returning and parameters
-    private Tensor<float> PreprocessImage(Image<Rgb24> image)
+    /// <param name="image">Original image</param>
+    /// <param name="targetSize">Target size for width and height</param>
+    /// <returns>Processed image with dimensions targetSize x targetSize</returns>
+    private Image<Rgb24> ResizeAndPadImage(Image<Rgb24> image, int targetSize)
     {
-        _logger.LogDebug("Original image size: {ImageWidth} x {ImageHeight}", image.Width, image.Height);
+        _logger.LogDebug(
+            "Original image size: {ImageWidth} x {ImageHeight}",
+            image.Width, image.Height);
 
-        // Calculate scale to resize image while maintaining aspect ratio
-        // Uses the smaller scale factor to ensure the image fits within ImageSize
-        float scale = Math.Min((float)ImageSize / image.Width, (float)ImageSize / image.Height);
+        float scale = Math.Min((float)targetSize / image.Width, (float)targetSize / image.Height);
         int newWidth = (int)(image.Width * scale);
         int newHeight = (int)(image.Height * scale);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Resizing to: {NewImageWidth}x{NewImageHeight} (scale: {ImageScale:F3})",
             newWidth, newHeight, scale);
 
-        // This will be used as the background for the resized image
-        using Image<Rgb24> paddedImage = new(width: ImageSize, height: ImageSize);
-        paddedImage.Mutate(imageProcessingContext => imageProcessingContext.BackgroundColor(Color.Black));
+        Image<Rgb24> paddedImage = new(width: targetSize, height: targetSize);
+        paddedImage.Mutate(operation: imageProcessingContext => imageProcessingContext.BackgroundColor(Color.Black));
 
-        // Resize the original image to fit within ImageSize while maintaining aspect ratio
-        image.Mutate(imageProcessingContext =>
+        image.Mutate(operation: imageProcessingContext =>
         {
             ResizeOptions resizeOptions = new() { Size = new Size(newWidth, newHeight), Mode = ResizeMode.Stretch };
             imageProcessingContext.Resize(resizeOptions);
         });
 
-        // Calculate padding to center the resized image
-        int xPad = (ImageSize - newWidth) / 2;
-        int yPad = (ImageSize - newHeight) / 2;
+        int xPad = (targetSize - newWidth) / 2;
+        int yPad = (targetSize - newHeight) / 2;
 
-        _logger.LogInformation("Padding: X={XPad}, Y={YPad}", xPad, yPad);
+        _logger.LogDebug("Padding: X={XPad}, Y={YPad}", xPad, yPad);
 
-        // Draw the resized image onto the center of the padded background
-        paddedImage.Mutate(imageProcessingContext =>
+        paddedImage.Mutate(operation: imageProcessingContext =>
         {
             Point backgroundLocation = new(xPad, yPad);
             imageProcessingContext.DrawImage(foreground: image, backgroundLocation, opacity: 1f);
         });
 
-        // TODO: add comment to explain the reason for creating this tensor.
+        return paddedImage;
+    }
+
+    /// <summary>
+    /// Creat a tensor suitable for model input using the processed image.
+    /// A tensor is a mathematical object that can represent multidimensional arrays of data
+    /// </summary>
+    /// <param name="image">Image to be used to create tensor</param>
+    /// <param name="imageSize">Image size</param>
+    /// <returns>Tensor of shape [1,3,imageSize,imageSize] containing normalized RGB values</returns>
+    private static Tensor<float> CreateTensor(Image<Rgb24> image, int imageSize)
+    {
         const int batchSize = 1;
         const int rgbChannels = 3;
-        DenseTensor<float> tensor = new(dimensions: [batchSize, rgbChannels, ImageSize, ImageSize]);
+        DenseTensor<float> tensor = new(dimensions: [batchSize, rgbChannels, imageSize, imageSize]);
 
         // Convert image pixels to normalized tensor values
         // Normalize pixel values to [0,1] range and reorder to RGB
-        for (int y = 0; y < ImageSize; y++)
+        for (int y = 0; y < imageSize; y++)
         {
-            for (int x = 0; x < ImageSize; x++)
+            for (int x = 0; x < imageSize; x++)
             {
-                Rgb24 pixel = paddedImage[x, y];
+                Rgb24 pixel = image[x, y];
                 // YOLOv3 expects pixels normalized to [0, 1] in RGB order
                 tensor[0, 0, y, x] = pixel.R / 255.0f; // R channel
                 tensor[0, 1, y, x] = pixel.G / 255.0f; // G channel
                 tensor[0, 2, y, x] = pixel.B / 255.0f; // B channel
-
-                if ((x == 0 && y == 0) || (x == ImageSize / 2 && y == ImageSize / 2))
-                {
-                    _logger.LogDebug(
-                        "Pixel at ({X},{Y}): R={Red:F3} G={Green:F3} B={Blue:F3}",
-                        x, y,
-                        tensor[0, 0, y, x],
-                        tensor[0, 1, y, x],
-                        tensor[0, 2, y, x]);
-                }
             }
         }
 
@@ -218,7 +209,7 @@ public class ObjectDetector : IDisposable
                     continue;
                 }
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
                     i, bestClass, _labels[bestClass], maxScore);
 
@@ -243,7 +234,7 @@ public class ObjectDetector : IDisposable
                 Box box = new() { X = x1 * scaleX, Y = y1 * scaleY, Width = width * scaleX, Height = height * scaleY };
                 DetectionResult detection = new() { Label = _labels[bestClass], Confidence = maxScore, Box = box };
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
                     detection.Label,
                     detection.Confidence,
@@ -264,7 +255,7 @@ public class ObjectDetector : IDisposable
             throw;
         }
 
-        _logger.LogInformation("Total detections found: {DetectionsCount}", detections.Count);
+        _logger.LogDebug("Total detections found: {DetectionsCount}", detections.Count);
 
         return detections.ToArray();
     }
