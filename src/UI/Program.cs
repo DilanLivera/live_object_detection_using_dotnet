@@ -1,19 +1,18 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
-
-using UI;
 using UI.Components;
+using UI.Infrastructure;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddHttpClient();
-builder.Services.AddSingleton<ObjectDetector>();
 
 builder.Services
        .AddRazorComponents()
        .AddInteractiveServerComponents();
+
+builder.Services.AddObjectDetection(builder.Configuration);
 
 builder.Services.AddHttpContextAccessor();
 
@@ -41,7 +40,7 @@ builder.Services
 
 builder.Services.AddAuthorizationCore();
 
-WebApplication? app = builder.Build();
+WebApplication app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
