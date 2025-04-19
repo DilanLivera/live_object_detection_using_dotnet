@@ -3,13 +3,38 @@ root = true
 # All files
 [*]
 indent_style = space
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# JavaScript and TypeScript files
+[*.{js,ts}]
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Arrow function spacing
+space_before_function_paren = false
+space_before_function_parentheses = false
+space_before_blocks = true
+space_before_function_call_parentheses = false
+arrow_parens = avoid
+arrow_spacing = true
+generator_spacing = true
+space_after_arrow_in_arrow_function = true
+space_before_arrow_in_arrow_function = true
 
 # Xml files
 [*.xml]
 indent_size = 2
 
 # C# files
-[*.cs]
+[*.{cs,csx,vb,vbx}]
+indent_size = 4
+tab_width = 4
 
 #### Core EditorConfig Options ####
 
@@ -25,7 +50,7 @@ insert_final_newline = false
 [*.{cs,vb}]
 
 # Organize usings
-dotnet_separate_import_directive_groups = true
+dotnet_separate_import_directive_groups = false
 dotnet_sort_system_directives_first = true
 file_header_template = unset
 
@@ -46,7 +71,7 @@ dotnet_style_parentheses_in_other_operators = never_if_unnecessary:silent
 dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:silent
 
 # Modifier preferences
-dotnet_style_require_accessibility_modifiers = for_non_interface_members:silent
+dotnet_style_require_accessibility_modifiers = always:warning
 
 # Expression-level preferences
 dotnet_style_coalesce_expression = true:suggestion
@@ -83,14 +108,14 @@ csharp_style_var_for_built_in_types = false:silent
 csharp_style_var_when_type_is_apparent = false:silent
 
 # Expression-bodied members
-csharp_style_expression_bodied_accessors = true:silent
-csharp_style_expression_bodied_constructors = false:silent
-csharp_style_expression_bodied_indexers = true:silent
-csharp_style_expression_bodied_lambdas = true:suggestion
-csharp_style_expression_bodied_local_functions = false:silent
-csharp_style_expression_bodied_methods = false:silent
-csharp_style_expression_bodied_operators = false:silent
-csharp_style_expression_bodied_properties = true:silent
+csharp_style_expression_bodied_accessors = true:warning
+csharp_style_expression_bodied_constructors = when_on_single_line:suggestion
+csharp_style_expression_bodied_indexers = true:warning
+csharp_style_expression_bodied_lambdas = true:warning
+csharp_style_expression_bodied_local_functions = true:warning
+csharp_style_expression_bodied_methods = true:warning
+csharp_style_expression_bodied_operators = true:warning
+csharp_style_expression_bodied_properties = true:warning
 
 # Pattern matching preferences
 csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
@@ -104,22 +129,22 @@ csharp_style_conditional_delegate_call = true:suggestion
 
 # Modifier preferences
 csharp_prefer_static_local_function = true:warning
-csharp_preferred_modifier_order = public, private, protected, internal, static, extern, new, virtual, abstract, sealed, override, readonly, unsafe, volatile, async:silent
+csharp_preferred_modifier_order = public, private, protected, internal, static, extern, new, virtual, abstract, sealed, override, readonly, unsafe, volatile, async:warning
 
 # Code-block preferences
 csharp_prefer_braces = true:silent
 csharp_prefer_simple_using_statement = true:suggestion
 
 # Expression-level preferences
-csharp_prefer_simple_default_expression = true:suggestion
-csharp_style_deconstructed_variable_declaration = true:suggestion
-csharp_style_inlined_variable_declaration = true:suggestion
-csharp_style_pattern_local_over_anonymous_function = true:suggestion
-csharp_style_prefer_index_operator = true:suggestion
-csharp_style_prefer_range_operator = true:suggestion
-csharp_style_throw_expression = true:suggestion
-csharp_style_unused_value_assignment_preference = discard_variable:suggestion
-csharp_style_unused_value_expression_statement_preference = discard_variable:silent
+csharp_prefer_simple_default_expression = true:warning
+csharp_style_deconstructed_variable_declaration = true:warning
+csharp_style_inlined_variable_declaration = true:warning
+csharp_style_pattern_local_over_anonymous_function = true:warning
+csharp_style_prefer_index_operator = true:warning
+csharp_style_prefer_range_operator = true:warning
+csharp_style_throw_expression = true:warning
+csharp_style_unused_value_assignment_preference = discard_variable:warning
+csharp_style_unused_value_expression_statement_preference = discard_variable:warning
 
 # 'using' directive preferences
 csharp_using_directive_placement = outside_namespace:silent
@@ -140,8 +165,21 @@ csharp_indent_block_contents = true
 csharp_indent_braces = false
 csharp_indent_case_contents = true
 csharp_indent_case_contents_when_block = true
-csharp_indent_labels = one_less_than_current
+csharp_indent_labels = flush_left
 csharp_indent_switch_labels = true
+
+# Method chain and parameter indentation
+csharp_indent_method_decl_pars = inside
+csharp_indent_invocation_pars = inside
+csharp_indent_statement_pars = inside
+csharp_indent_pars = inside
+csharp_indent_nested_pars = true
+csharp_align_multiline_parameter = true
+csharp_align_multiline_argument = true
+csharp_align_multiline_calls_chain = true
+csharp_align_multiline_array_and_object_initializer = true
+csharp_align_multiline_binary_expressions_chain = true
+csharp_align_first_arg_by_paren = true
 
 # Space preferences
 csharp_space_after_cast = false
@@ -169,7 +207,13 @@ csharp_space_between_square_brackets = false
 
 # Wrapping preferences
 csharp_preserve_single_line_blocks = true
-csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_statements = false
+csharp_wrap_parameters_style = chop_if_long
+csharp_wrap_arguments_style = chop_if_long
+csharp_wrap_before_binary_pattern = true
+csharp_wrap_chained_method_calls = chop_if_long
+csharp_wrap_multiple_declaration_style = chop_always
+# csharp_max_line_length = 120
 
 #### Naming styles ####
 [*.{cs,vb}]
@@ -361,4 +405,39 @@ dotnet_naming_style.s_camelcase.required_prefix = s_
 dotnet_naming_style.s_camelcase.required_suffix =
 dotnet_naming_style.s_camelcase.word_separator =
 dotnet_naming_style.s_camelcase.capitalization = camel_case
+
+# Lambda formatting
+csharp_style_prefer_simple_using_statement = true:suggestion
+csharp_style_pattern_local_over_anonymous_function = true:suggestion
+csharp_prefer_simple_default_expression = true:suggestion
+csharp_style_prefer_local_over_anonymous_function = true:suggestion
+csharp_style_inlined_variable_declaration = true:suggestion
+
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:suggestion
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:suggestion
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:suggestion
+
+# Markdown files
+[*.{md,markdown}]
+max_line_length = off
+
+# Attributes on separate lines
+csharp_style_allow_embedded_statements_on_same_line_experimental = false
+csharp_style_allow_blank_lines_between_consecutive_braces_experimental = false
+dotnet_style_allow_multiple_blank_lines_experimental = false
+dotnet_style_allow_statement_immediately_after_block_experimental = false
+
+# Attribute placement
+csharp_style_prefer_separate_lines_for_attribute = true:warning
+
+# Naming conventions
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+dotnet_naming_rule.public_members_must_be_capitalized.symbols = public_symbols
+dotnet_naming_rule.public_members_must_be_capitalized.style = pascal_case_style
+dotnet_naming_rule.public_members_must_be_capitalized.severity = warning
+
+dotnet_naming_symbols.public_symbols.applicable_kinds = property, method, field, event, delegate
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public
+dotnet_naming_symbols.public_symbols.required_modifiers = readonly
 
