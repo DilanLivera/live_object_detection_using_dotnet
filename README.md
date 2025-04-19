@@ -94,97 +94,12 @@ Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
 
    a. ONNX Model
 
-    - Create a `Models` directory in the `src/UI` folder if it does not exist.
-    - Download the "Tiny YOLOv3" model from the [ONNX Model](https://github.com/onnx/models/blob/main/validated/vision/object_detection_segmentation/tiny-yolov3/model/tiny-yolov3-11.onnx) page to the `src/UI/Models` directory. Please make sure the model file name is `tiny-yolov3-11.onnx`. The input and output requirements depend on the version of the model. Because of this, we can't use a model that is different from the current implementation.
+    - Create a `Infrastructure/Models/TinyYoloV3` directory in the `src/UI` folder if it does not exist.
+    - Download the "Tiny YOLOv3" model from the [ONNX Model](https://github.com/onnx/models/blob/main/validated/vision/object_detection_segmentation/tiny-yolov3/model/tiny-yolov3-11.onnx) page to the `src/UI/Infrastructure/Models/TinyYoloV3` directory. Please make sure the model file name is `tiny-yolov3-11.onnx`. The input and output requirements depend on the version of the model. Because of this, we can't use a model that is different from the current implementation.
 
    b. COCO Labels File
 
-   The coco.names file is essential because it maps numerical class indices output by the YOLO model to human-readable labels. The YOLO v3 model can detect 80 different classes. When the model detects an object, it outputs a number (0-79) corresponding to its class. The position (line number) in coco.names match these indices exactly - for example, if the model outputs "39", the code looks up the 40th line in coco.names to find "bottle". This order must be preserved exactly as the model was trained, or objects will be mislabeled. Without this file, users would see meaningless numbers instead of object names like "person" or "car".
-
-   Either create a file named `coco.names` in the `src/UI/Models` directory and add the following content to the file, or you can download it from [here](https://github.com/qqwweee/keras-yolo3/blob/master/model_data/coco_classes.txt).
-
-    ```
-    person
-    bicycle
-    car
-    motorcycle
-    airplane
-    bus
-    train
-    truck
-    boat
-    traffic light
-    fire hydrant
-    stop sign
-    parking meter
-    bench
-    bird
-    cat
-    dog
-    horse
-    sheep
-    cow
-    elephant
-    bear
-    zebra
-    giraffe
-    backpack
-    umbrella
-    handbag
-    tie
-    suitcase
-    frisbee
-    skis
-    snowboard
-    sports ball
-    kite
-    baseball bat
-    baseball glove
-    skateboard
-    surfboard
-    tennis racket
-    bottle
-    wine glass
-    cup
-    fork
-    knife
-    spoon
-    bowl
-    banana
-    apple
-    sandwich
-    orange
-    broccoli
-    carrot
-    hot dog
-    pizza
-    donut
-    cake
-    chair
-    couch
-    potted plant
-    bed
-    dining table
-    toilet
-    tv
-    laptop
-    mouse
-    remote
-    keyboard
-    cell phone
-    microwave
-    oven
-    toaster
-    sink
-    refrigerator
-    book
-    clock
-    vase
-    scissors
-    teddy bear
-    hair drier
-    toothbrush
-    ```
+   The coco.names file is essential because it maps numerical class indices output by the YOLO model to human-readable labels. The YOLO v3 model can detect 80 different classes. When the model detects an object, it outputs a number (0-79) corresponding to its class. The position (line number) in coco.names match these indices exactly - for example, if the model outputs "39", the code looks up the 40th line in coco.names to find "bottle". This order must be preserved exactly as the model was trained, or objects will be mislabeled. Without this file, users would see meaningless numbers instead of object names like "person" or "car". The `coco.names` file is already included in the `src/UI/Infrastructure/Models` directory.
 
 ### Running the Application
 
@@ -211,6 +126,6 @@ Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
 
 #### Model Loading Issues
 
-- Verify that the model files are correctly placed in the `src/UI/Models` directory
+- Verify that the model files are correctly placed in the `src/UI/Infrastructure/Models/TinyYoloV3` directory
 - Check the application logs for any specific error messages
 - Ensure the model file name match `tiny-yolov3-11.onnx`.

@@ -3,6 +3,8 @@
 @inject IJSRuntime JsRuntime
 @inject ILogger<Home> Logger
 @inject ObjectDetector ObjectDetector
+@using UI.Infrastructure
+@using UI.Infrastructure.Models
 @implements IAsyncDisposable
 
 <PageTitle>Home</PageTitle>
@@ -19,7 +21,7 @@
     }
     <button @onclick="ToggleCameraAsync"
             class="px-8 py-3 text-lg font-medium rounded-full text-white transition-all duration-200
-                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 transform hover:scale-105 hover:bg-gray-600 
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 transform hover:scale-105 hover:bg-gray-600
                     @(_isCameraActive ? "bg-red-500" : "bg-green-500")">
         @(_isCameraActive ? "Stop Camera" : "Start Camera")
     </button>
@@ -157,7 +159,8 @@
 
                     // Generate and draw fake detections
                     // var fakeDetections = GenerateFakeDetections();
-                    DetectionResult[] detections = await ObjectDetector.DetectObjectsAsync(image);
+
+                    DetectionResult[] detections = ObjectDetector.Detect(image);
 
                     await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", "cameraFeed", detections);
                 }
