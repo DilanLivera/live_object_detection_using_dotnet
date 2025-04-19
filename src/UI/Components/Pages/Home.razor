@@ -80,7 +80,7 @@
         {
             // Reset failure counter on fresh start to give clean slate
             _consecutiveFailures = 0;
-            var isCameraInitialized = await JsRuntime.InvokeAsync<bool>(identifier: "CameraManager.initializeCamera", args: "cameraFeed");
+            bool isCameraInitialized = await JsRuntime.InvokeAsync<bool>(identifier: "CameraManager.initializeCamera", args: "cameraFeed");
             if (!isCameraInitialized)
             {
                 _error = "Failed to initialize camera. Please ensure camera permissions are granted.";
@@ -143,7 +143,7 @@
                         break;
                     }
 
-                    var image = await JsRuntime.InvokeAsync<byte[]>(identifier: "CameraManager.captureFrame", args: "cameraFeed");
+                    byte[] image = await JsRuntime.InvokeAsync<byte[]>(identifier: "CameraManager.captureFrame", args: "cameraFeed");
 
                     if (image.Length == 0)
                     {
@@ -157,7 +157,7 @@
 
                     // Generate and draw fake detections
                     // var fakeDetections = GenerateFakeDetections();
-                    var detections = await ObjectDetector.DetectObjectsAsync(image);
+                    DetectionResult[] detections = await ObjectDetector.DetectObjectsAsync(image);
 
                     await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", "cameraFeed", detections);
                 }
@@ -165,17 +165,15 @@
                 {
                     // Track SignalR timeouts to detect persistent connection problems
                     _consecutiveFailures++;
-                    Logger.LogWarning(
-                        "Frame capture was canceled (attempt {Attempt} of {Max})",
-                        _consecutiveFailures, MaxConsecutiveFailures);
+                    Logger.LogWarning("Frame capture was canceled (attempt {Attempt} of {Max})",
+                                      _consecutiveFailures, MaxConsecutiveFailures);
                 }
                 catch (Exception ex)
                 {
                     _consecutiveFailures++;
-                    Logger.LogError(
-                        ex,
-                        "Detection error (attempt {Attempt} of {Max})",
-                        _consecutiveFailures, MaxConsecutiveFailures);
+                    Logger.LogError(ex,
+                                    "Detection error (attempt {Attempt} of {Max})",
+                                    _consecutiveFailures, MaxConsecutiveFailures);
                 }
             }
         }

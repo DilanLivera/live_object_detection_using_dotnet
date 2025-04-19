@@ -94,7 +94,7 @@ Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
 
    a. ONNX Model
 
-    - Create a `Models` directory in the `src/UI` folder if it does not exists.
+    - Create a `Models` directory in the `src/UI` folder if it does not exist.
     - Download the "Tiny YOLOv3" model from the [ONNX Model](https://github.com/onnx/models/blob/main/validated/vision/object_detection_segmentation/tiny-yolov3/model/tiny-yolov3-11.onnx) page to the `src/UI/Models` directory. Please make sure the model file name is `tiny-yolov3-11.onnx`. The input and output requirements depend on the version of the model. Because of this, we can't use a model that is different from the current implementation.
 
    b. COCO Labels File
@@ -197,13 +197,13 @@ Rel(realTimeComms, videoCapture, "Updates the UI overlay with detection data")
 
 2. Access the Web Interface
 
-    - Open your web browser and navigate to `http://localhost:5013`
-    - Allow camera access when prompted by the browser
+- Open your web browser and navigate to `http://localhost:5013`
+- Allow camera access when prompted by the browser
 
 3. Start Camera
 
-    - Click the "Start Camera" button to initialize your webcam
-    - The video feed should appear in the main window
+- Click the "Start Camera" button to initialize your webcam
+- The video feed should appear in the main window
 
 4. Object Detection: The application automatically detects objects once the Camera is active. It highlights the detected objects with bounding boxes. Each detection includes a label and confidence score.
 

@@ -1,3 +1,4 @@
+@using System.Security.Claims
 @inject NavigationManager NavigationManager
 @inject IHttpContextAccessor HttpContextAccessor
 @inject AuthenticationStateProvider AuthStateProvider
@@ -74,8 +75,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        AuthenticationState authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        ClaimsPrincipal user = authState.User;
 
         if (user.Identity is null)
         {
@@ -90,14 +91,8 @@
         }
     }
 
-    private void SignIn()
-    {
-        NavigationManager.NavigateTo(uri: "/signin", forceLoad: true);
-    }
+    private void SignIn() => NavigationManager.NavigateTo(uri: "/signin", forceLoad: true);
 
-    private void SignOut()
-    {
-        NavigationManager.NavigateTo(uri: "/signout", forceLoad: true);
-    }
+    private void SignOut() => NavigationManager.NavigateTo(uri: "/signout", forceLoad: true);
 
 }
