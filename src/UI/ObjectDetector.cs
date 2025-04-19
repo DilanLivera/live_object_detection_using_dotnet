@@ -31,9 +31,8 @@ public class ObjectDetector : IDisposable
         string modelPath = Path.Combine(environment.ContentRootPath, "Models", "tiny-yolov3-11.onnx");
         if (!File.Exists(modelPath))
         {
-            throw new FileNotFoundException(
-                "Model file not found. Please ensure 'tiny-yolov3-11.onnx' is in the 'src/UI/Models' directory.",
-                fileName: modelPath);
+            throw new FileNotFoundException("Model file not found. Please ensure 'tiny-yolov3-11.onnx' is in the 'src/UI/Models' directory.",
+                                            fileName: modelPath);
         }
 
         _session = new InferenceSession(modelPath);
@@ -97,17 +96,18 @@ public class ObjectDetector : IDisposable
     /// <returns>Processed image with dimensions targetSize x targetSize</returns>
     private Image<Rgb24> ResizeAndPadImage(Image<Rgb24> image, int targetSize)
     {
-        _logger.LogDebug(
-            "Original image size: {ImageWidth} x {ImageHeight}",
-            image.Width, image.Height);
+        _logger.LogDebug("Original image size: {ImageWidth} x {ImageHeight}",
+                         image.Width,
+                         image.Height);
 
         float scale = Math.Min((float)targetSize / image.Width, (float)targetSize / image.Height);
         int newWidth = (int)(image.Width * scale);
         int newHeight = (int)(image.Height * scale);
 
-        _logger.LogDebug(
-            "Resizing to: {NewImageWidth}x{NewImageHeight} (scale: {ImageScale:F3})",
-            newWidth, newHeight, scale);
+        _logger.LogDebug("Resizing to: {NewImageWidth}x{NewImageHeight} (scale: {ImageScale:F3})",
+                         newWidth,
+                         newHeight,
+                         scale);
 
         Image<Rgb24> paddedImage = new(width: targetSize, height: targetSize);
         paddedImage.Mutate(operation: imageProcessingContext => imageProcessingContext.BackgroundColor(Color.Black));
@@ -209,9 +209,11 @@ public class ObjectDetector : IDisposable
                     continue;
                 }
 
-                _logger.LogDebug(
-                    "Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
-                    i, bestClass, _labels[bestClass], maxScore);
+                _logger.LogDebug("Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
+                                 i,
+                                 bestClass,
+                                 _labels[bestClass],
+                                 maxScore);
 
                 // Extract bounding box coordinates
                 float y1 = boxes[0, i, 0];
@@ -234,14 +236,13 @@ public class ObjectDetector : IDisposable
                 Box box = new() { X = x1 * scaleX, Y = y1 * scaleY, Width = width * scaleX, Height = height * scaleY };
                 DetectionResult detection = new() { Label = _labels[bestClass], Confidence = maxScore, Box = box };
 
-                _logger.LogDebug(
-                    "Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
-                    detection.Label,
-                    detection.Confidence,
-                    detection.Box.X,
-                    detection.Box.Y,
-                    detection.Box.Width,
-                    detection.Box.Height);
+                _logger.LogDebug("Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
+                                 detection.Label,
+                                 detection.Confidence,
+                                 detection.Box.X,
+                                 detection.Box.Y,
+                                 detection.Box.Width,
+                                 detection.Box.Height);
 
                 detections.Add(detection);
             }
@@ -316,10 +317,7 @@ public class ObjectDetector : IDisposable
         return intersectionArea / (box1Area + box2Area - intersectionArea);
     }
 
-    public void Dispose()
-    {
-        _session.Dispose();
-    }
+    public void Dispose() => _session.Dispose();
 }
 
 /// <summary>
