@@ -18,6 +18,12 @@ public sealed class YoloV4Model : IObjectDetectionModel
     private readonly string[] _labels;
     private readonly YoloV4ModelConfig _modelConfig;
 
+    // YOLOv4 specific constants
+    private readonly float[] _anchors = new float[] { 12, 16, 19, 36, 40, 28, 36, 75, 76, 55, 72, 146, 142, 110, 192, 243, 459, 401 };
+
+    private readonly float[] _strides = new float[] { 8, 16, 32 };
+    private readonly float[] _xyscale = new float[] { 1.2f, 1.1f, 1.05f };
+
     public YoloV4Model(
         IWebHostEnvironment environment,
         ILogger<YoloV4Model> logger,
@@ -54,9 +60,12 @@ public sealed class YoloV4Model : IObjectDetectionModel
     {
         try
         {
-            using Image<Rgba32> resizedAndPaddedImage = ResizeAndPadImage(image, _modelConfig.ImageSize);
-            DenseTensor<float> inputTensor = CreateTensor(resizedAndPaddedImage, _modelConfig.ImageSize);
+            // YOLOv4 doesn't need a shape tensor, but we need to return one to satisfy the interface
+            // We'll use a dummy shape tensor that won't be used in inference
             DenseTensor<float> shapeTensor = new(dimensions: new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
+
+            using Image<Rgba32> resizedAndPaddedImage = ResizeAndPadImageWithAspectRatio(image, _modelConfig.ImageSize);
+            DenseTensor<float> inputTensor = CreateTensor(resizedAndPaddedImage, _modelConfig.ImageSize);
 
             return (inputTensor, shapeTensor);
         }
@@ -72,12 +81,17 @@ public sealed class YoloV4Model : IObjectDetectionModel
     {
         try
         {
+            // For YOLOv4, we only need to pass the image input tensor
             List<NamedOnnxValue> inputs =
             [
                 NamedOnnxValue.CreateFromTensor(_modelConfig.ImageInputTensorName, inputTensor)
             ];
 
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = _session.Run(inputs);
+
+            _logger.LogDebug("Model output: {ModelOutput}",
+                             // Must not include the output value because it contains too much data.
+                             JsonSerializer.Serialize(outputs.Select(o => new { o.Name, o.ElementType, o.ValueType })));
 
             List<Tensor<float>> boxes = _modelConfig.BoxesOutputTensorNames
                                                     .Select(name => outputs.First(o => o.Name == name).AsTensor<float>())
@@ -99,10 +113,11 @@ public sealed class YoloV4Model : IObjectDetectionModel
     /// <inheritdoc />
     public DetectionResult[] ProcessOutputs(ModelOutput modelOutput, int imageWidth, int imageHeight)
     {
-        List<DetectionResult> detections = [];
-
         try
         {
+            // Process each detection layer (YOLOv4 has 3 detection layers)
+            List<(float[] Box, float Confidence, int ClassId)> allDetections = new();
+
             for (int layerIndex = 0; layerIndex < modelOutput.Boxes.Count; layerIndex++)
             {
                 Tensor<float> boxes = modelOutput.Boxes[layerIndex];
@@ -113,94 +128,264 @@ public sealed class YoloV4Model : IObjectDetectionModel
                                  string.Join(",", boxes.Dimensions.ToArray()),
                                  string.Join(",", scores.Dimensions.ToArray()));
 
-                for (int i = 0; i < boxes.Dimensions[1]; i++)
+                // Get anchors for this layer (3 anchors per layer)
+                float[] layerAnchors = GetAnchorsForLayer(layerIndex);
+                float stride = _strides[layerIndex];
+                float xyscale = _xyscale[layerIndex];
+
+                // Grid size for this layer
+                int gridSize = boxes.Dimensions[1]; // Height dimension
+
+                // Process each box in this layer
+                for (int i = 0; i < boxes.Dimensions[1]; i++) // Loop through height
                 {
-                    float maxScore = float.MinValue;
-                    const int noValidClass = -1;
-                    int bestClass = noValidClass;
-
-                    for (int c = 0; c < scores.Dimensions[1]; c++)
+                    for (int j = 0; j < boxes.Dimensions[2]; j++) // Loop through width
                     {
-                        float score = scores[0, c, i];
-
-                        if (score > maxScore)
+                        for (int a = 0; a < 3; a++) // Loop through anchors
                         {
-                            maxScore = score;
-                            bestClass = c;
+                            ProcessDetection(boxes,
+                                             scores,
+                                             allDetections,
+                                             gridY: i,
+                                             gridX: j,
+                                             anchorIdx: a,
+                                             layerAnchors,
+                                             stride,
+                                             xyscale,
+                                             gridSize,
+                                             imageWidth,
+                                             imageHeight);
                         }
                     }
-
-                    if (maxScore < _modelConfig.ConfidenceThreshold || bestClass == noValidClass)
-                    {
-                        continue;
-                    }
-
-                    _logger.LogDebug("Found detection in layer {LayerIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
-                        layerIndex,
-                        bestClass,
-                        _labels[bestClass],
-                        maxScore);
-
-                    // Extract bounding box coordinates
-                    float y1 = boxes[0, i, 0];
-                    float x1 = boxes[0, i, 1];
-                    float y2 = boxes[0, i, 2];
-                    float x2 = boxes[0, i, 3];
-
-                    // Calculate width and height from coordinates
-                    float width = x2 - x1;
-                    float height = y2 - y1;
-
-                    // Target dimensions for the processed image
-                    const float processedWidth = 800f;
-                    const float processedHeight = 450f;
-
-                    // Calculate scale factors
-                    float scaleX = processedWidth / imageWidth;
-                    float scaleY = processedHeight / imageHeight;
-
-                    Box box = new()
-                              {
-                                  X = x1 * scaleX,
-                                  Y = y1 * scaleY,
-                                  Width = width * scaleX,
-                                  Height = height * scaleY
-                              };
-
-                    DetectionResult detection = new()
-                                                {
-                                                    Label = _labels[bestClass],
-                                                    Confidence = maxScore,
-                                                    Box = box
-                                                };
-
-                    _logger.LogDebug("Detection in layer {LayerIndex}: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
-                                     layerIndex,
-                                     detection.Label,
-                                     detection.Confidence,
-                                     detection.Box.X,
-                                     detection.Box.Y,
-                                     detection.Box.Width,
-                                     detection.Box.Height);
-
-                    detections.Add(detection);
                 }
             }
 
-            // Apply Non-Maximum Suppression across all layers
-            detections = ApplyNonMaximumSuppression(detections.ToArray()).ToList();
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Detection Results: {DetectionResults}", JsonSerializer.Serialize(allDetections));
+            }
+            // Apply non-maximum suppression
+            DetectionResult[] applyNonMaximumSuppression = ApplyNonMaximumSuppression(allDetections);
+            return applyNonMaximumSuppression;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing model outputs");
-            throw;
+            _logger.LogError(ex, "Error processing model outputs: {Error}", ex.Message);
+            return [];
         }
-
-        _logger.LogDebug("Total detections found across all layers: {DetectionsCount}", detections.Count);
-        return detections.ToArray();
     }
 
-    private static Image<Rgba32> ResizeAndPadImage(Image<Rgba32> image, int targetSize)
+    private void ProcessDetection(
+        Tensor<float> boxes,
+        Tensor<float> scores,
+        List<(float[] Box, float Confidence, int ClassId)> allDetections,
+        int gridY,
+        int gridX,
+        int anchorIdx,
+        float[] layerAnchors,
+        float stride,
+        float xyscale,
+        int gridSize,
+        int imageWidth,
+        int imageHeight)
+    {
+        try
+        {
+            // YOLOv4 network outputs have different dimensions for boxes and scores
+            // For some models: boxes[0, gridY, gridX, anchorIdx, 0:4]
+            // For some models: scores[0, classIdx, gridY, gridX, anchorIdx]
+
+            // Get class scores for this grid cell and anchor
+            float[] classScores;
+
+            if (scores.Dimensions.Length == 5 && scores.Dimensions[1] > scores.Dimensions[4])
+            {
+                // Scores are in format [batch, num_classes, height, width, anchors]
+                classScores = new float[scores.Dimensions[1]];
+                for (int c = 0; c < classScores.Length; c++)
+                {
+                    classScores[c] = scores[0, c, gridY, gridX, anchorIdx];
+                }
+            }
+            else
+            {
+                // Scores are in format [batch, height, width, anchors, num_classes]
+                classScores = new float[scores.Dimensions[4]];
+                for (int c = 0; c < classScores.Length; c++)
+                {
+                    classScores[c] = scores[0, gridY, gridX, anchorIdx, c];
+                }
+            }
+
+            // Find the class with highest score
+            int bestClassId = -1;
+            float bestScore = 0;
+
+            for (int c = 0; c < classScores.Length; c++)
+            {
+                if (classScores[c] > bestScore)
+                {
+                    bestScore = classScores[c];
+                    bestClassId = c;
+                }
+            }
+
+            // Skip if below confidence threshold
+            if (bestScore < _modelConfig.ConfidenceThreshold)
+            {
+                return;
+            }
+
+            _logger.LogDebug("Found class {ClassId} ({ClassName}) with confidence {Confidence:F3}",
+                             bestClassId,
+                             _labels[bestClassId],
+                             bestScore);
+
+            // Get box coordinates
+            float tx,
+                ty,
+                tw,
+                th;
+
+            if (boxes.Dimensions.Length == 5 && boxes.Dimensions[4] >= 4)
+            {
+                // Boxes tensor is in format [batch, height, width, anchors, 4]
+                tx = boxes[0, gridY, gridX, anchorIdx, 0]; // x offset
+                ty = boxes[0, gridY, gridX, anchorIdx, 1]; // y offset
+                tw = boxes[0, gridY, gridX, anchorIdx, 2]; // width
+                th = boxes[0, gridY, gridX, anchorIdx, 3]; // height
+            }
+            else
+            {
+                // Handle other possible format
+                _logger.LogWarning("Unexpected box tensor format. Dimensions: {Dimensions}",
+                                   string.Join(", ", boxes.Dimensions.ToArray().Select(d => d.ToString())));
+                return;
+            }
+
+            // Apply sigmoid to tx and ty, then scale and add grid position
+            float x = ((float)Sigmoid(tx) * xyscale - 0.5f * (xyscale - 1) + gridX) * stride;
+            float y = ((float)Sigmoid(ty) * xyscale - 0.5f * (xyscale - 1) + gridY) * stride;
+
+            // Apply exponential to tw and th, then multiply by anchor dimensions
+            float w = (float)Math.Exp(tw) * layerAnchors[anchorIdx * 2];
+            float h = (float)Math.Exp(th) * layerAnchors[anchorIdx * 2 + 1];
+
+            // Convert to corner coordinates (xmin, ymin, xmax, ymax)
+            float xmin = x - w / 2;
+            float ymin = y - h / 2;
+            float xmax = x + w / 2;
+            float ymax = y + h / 2;
+
+            // Scale back to original image dimensions
+            float scale = Math.Min(_modelConfig.ImageSize / (float)imageWidth, _modelConfig.ImageSize / (float)imageHeight);
+            float dw = (_modelConfig.ImageSize - scale * imageWidth) / 2;
+            float dh = (_modelConfig.ImageSize - scale * imageHeight) / 2;
+
+            xmin = (xmin - dw) / scale;
+            ymin = (ymin - dh) / scale;
+            xmax = (xmax - dw) / scale;
+            ymax = (ymax - dh) / scale;
+
+            // Clip to image boundaries
+            xmin = Math.Max(0, xmin);
+            ymin = Math.Max(0, ymin);
+            xmax = Math.Min(imageWidth, xmax);
+            ymax = Math.Min(imageHeight, ymax);
+
+            // Skip invalid boxes
+            if (xmin >= xmax || ymin >= ymax)
+            {
+                return;
+            }
+
+            // Add to detection list
+            allDetections.Add((
+                                  new float[] { xmin, ymin, xmax, ymax },
+                                  bestScore,
+                                  bestClassId
+                              ));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing detection: {Error}", ex.Message);
+        }
+    }
+
+    private float[] GetAnchorsForLayer(int layerIndex)
+    {
+        // YOLOv4 has 3 anchors per layer, 2 values (width, height) per anchor
+        int startIdx = layerIndex * 6; // 3 anchors * 2 values
+        return new float[] { _anchors[startIdx], _anchors[startIdx + 1], _anchors[startIdx + 2], _anchors[startIdx + 3], _anchors[startIdx + 4], _anchors[startIdx + 5] };
+    }
+
+    private DetectionResult[] ApplyNonMaximumSuppression(List<(float[] Box, float Confidence, int ClassId)> detections)
+    {
+        // Group by class
+        IEnumerable<IGrouping<int, (float[] Box, float Confidence, int ClassId)>> detectionsByClass = detections.GroupBy(d => d.ClassId);
+        List<DetectionResult> results = [];
+
+        foreach (IGrouping<int, (float[] Box, float Confidence, int ClassId)> classGroup in detectionsByClass)
+        {
+            List<(float[] Box, float Confidence, int ClassId)> sortedDetections = classGroup.OrderByDescending(d => d.Confidence).ToList();
+
+            while (sortedDetections.Count > 0)
+            {
+                (float[] Box, float Confidence, int ClassId) current = sortedDetections[0];
+
+                // Add to results with normalized coordinates (0-1 range for UI display)
+                results.Add(new DetectionResult
+                            {
+                                Label = _labels[current.ClassId],
+                                Confidence = current.Confidence,
+                                Box = new Box
+                                      {
+                                          // Normalize to 0-1 range for UI display
+                                          X = current.Box[0] / 1000f, Y = current.Box[1] / 1000f, Width = (current.Box[2] - current.Box[0]) / 1000f, Height = (current.Box[3] - current.Box[1]) / 1000f
+                                      }
+                            });
+
+                _logger.LogDebug("Added detection: {Label} ({Confidence:P1}) at [{X:F3}, {Y:F3}, {Width:F3}, {Height:F3}]",
+                                 _labels[current.ClassId],
+                                 current.Confidence,
+                                 current.Box[0] / 1000f,
+                                 current.Box[1] / 1000f,
+                                 (current.Box[2] - current.Box[0]) / 1000f,
+                                 (current.Box[3] - current.Box[1]) / 1000f);
+
+                // Remove current detection
+                sortedDetections.RemoveAt(0);
+
+                // Remove overlapping detections
+                sortedDetections.RemoveAll(d => CalculateIoU(current.Box, d.Box) > _modelConfig.IntersectionOverUnionThreshold);
+            }
+        }
+
+        return results.ToArray();
+    }
+
+    private static float CalculateIoU(float[] box1, float[] box2)
+    {
+        // Intersection coordinates
+        float intersectLeft = Math.Max(box1[0], box2[0]);
+        float intersectTop = Math.Max(box1[1], box2[1]);
+        float intersectRight = Math.Min(box1[2], box2[2]);
+        float intersectBottom = Math.Min(box1[3], box2[3]);
+
+        // Intersection area
+        float intersectWidth = Math.Max(0, intersectRight - intersectLeft);
+        float intersectHeight = Math.Max(0, intersectBottom - intersectTop);
+        float intersectArea = intersectWidth * intersectHeight;
+
+        // Union area
+        float box1Area = (box1[2] - box1[0]) * (box1[3] - box1[1]);
+        float box2Area = (box2[2] - box2[0]) * (box2[3] - box2[1]);
+        float unionArea = box1Area + box2Area - intersectArea;
+
+        return intersectArea / unionArea;
+    }
+
+    private static Image<Rgba32> ResizeAndPadImageWithAspectRatio(Image<Rgba32> image, int targetSize)
     {
         // Calculate scaling factor to fit within target size while maintaining aspect ratio
         float scale = Math.Min(targetSize / (float)image.Width, targetSize / (float)image.Height);
@@ -244,46 +429,7 @@ public sealed class YoloV4Model : IObjectDetectionModel
         return tensor;
     }
 
-    private DetectionResult[] ApplyNonMaximumSuppression(DetectionResult[] detections)
-    {
-        List<DetectionResult> results = [];
-        IEnumerable<IGrouping<string, DetectionResult>> detectionsGroups = detections.GroupBy(r => r.Label);
-
-        foreach (IGrouping<string, DetectionResult> group in detectionsGroups)
-        {
-            List<DetectionResult> sorted = group.OrderByDescending(r => r.Confidence).ToList();
-
-            while (sorted.Count > 0)
-            {
-                DetectionResult current = sorted[0];
-                results.Add(current);
-                sorted.RemoveAt(0);
-
-                sorted.RemoveAll(r => CalculateIntersectionOverUnion(current.Box, r.Box) > _modelConfig.IntersectionOverUnionThreshold);
-            }
-        }
-
-        return results.ToArray();
-    }
-
-    private static float CalculateIntersectionOverUnion(Box box1, Box box2)
-    {
-        float intersectionX = Math.Max(box1.X, box2.X);
-        float intersectionY = Math.Max(box1.Y, box2.Y);
-        float intersectionWidth = Math.Min(box1.X + box1.Width, box2.X + box2.Width) - intersectionX;
-        float intersectionHeight = Math.Min(box1.Y + box1.Height, box2.Y + box2.Height) - intersectionY;
-
-        if (intersectionWidth <= 0 || intersectionHeight <= 0)
-        {
-            return 0;
-        }
-
-        float intersectionArea = intersectionWidth * intersectionHeight;
-        float box1Area = box1.Width * box1.Height;
-        float box2Area = box2.Width * box2.Height;
-
-        return intersectionArea / (box1Area + box2Area - intersectionArea);
-    }
+    private static float Sigmoid(float x) => 1.0f / (1.0f + (float)Math.Exp(-x));
 
     public void Dispose() => _session.Dispose();
 }

@@ -33,11 +33,21 @@ public sealed class ObjectDetector
         {
             using Image<Rgba32> image = Image.Load<Rgba32>(imageData);
 
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Image Height: {ImageHeight}, Width: {ImageWidth}, Size: {ImageSize}",
+                                 image.Height,
+                                 image.Width,
+                                 image.Size);
+            }
+
             (DenseTensor<float> inputTensor, DenseTensor<float> shapeTensor) = _model.PreprocessImage(image);
 
             ModelOutput modelOutput = _model.RunInference(inputTensor, shapeTensor);
 
-            return _model.ProcessOutputs(modelOutput, image.Width, image.Height);
+            DetectionResult[] detectionResults = _model.ProcessOutputs(modelOutput, image.Width, image.Height);
+
+            return detectionResults;
         }
         catch (Exception ex)
         {

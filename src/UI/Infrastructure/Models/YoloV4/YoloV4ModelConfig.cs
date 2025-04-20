@@ -14,21 +14,19 @@ public sealed class YoloV4ModelConfig : BaseModelConfig
     /// Gets the names of the output tensors containing bounding box coordinates from each detection layer.
     /// YOLOv4 has three output layers for different scales.
     /// </summary>
-    public IReadOnlyList<string> BoxesOutputTensorNames => OutputTensors
-        .Where(kvp => kvp.Key.StartsWith("boxes_"))
-        .OrderBy(kvp => kvp.Key)
-        .Select(kvp => kvp.Value)
-        .ToList()
-        .AsReadOnly();
+    public IReadOnlyList<string> BoxesOutputTensorNames => OutputTensors.Where(kvp => kvp.Key.StartsWith("boxes_"))
+                                                                        .OrderBy(kvp => kvp.Key)
+                                                                        .Select(kvp => kvp.Value)
+                                                                        .ToList()
+                                                                        .AsReadOnly();
 
     /// <summary>
     /// Gets the names of the output tensors containing class probabilities from each detection layer.
     /// YOLOv4 has three output layers for different scales.
     /// </summary>
-    public IReadOnlyList<string> ScoresOutputTensorNames => OutputTensors
-        .Where(kvp => kvp.Key.StartsWith("scores_"))
-        .OrderBy(kvp => kvp.Key)
-        .Select(kvp => kvp.Value)
-        .ToList()
-        .AsReadOnly();
+    public IReadOnlyList<string> ScoresOutputTensorNames => OutputTensors.Where(kvp => kvp.Key.StartsWith("scores_"))
+                                                                         .OrderBy(kvp => kvp.Key)
+                                                                         .Select(kvp => kvp.Value)
+                                                                         .ToList()
+                                                                         .AsReadOnly();
 }
