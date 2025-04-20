@@ -35,9 +35,9 @@ public sealed class ObjectDetector
 
             (DenseTensor<float> inputTensor, DenseTensor<float> shapeTensor) = _model.PreprocessImage(image);
 
-            (Tensor<float> boxes, Tensor<float> scores) = _model.RunInference(inputTensor, shapeTensor);
+            ModelOutput modelOutput = _model.RunInference(inputTensor, shapeTensor);
 
-            return _model.ProcessOutputs(boxes, scores, image.Width, image.Height);
+            return _model.ProcessOutputs(modelOutput, image.Width, image.Height);
         }
         catch (Exception ex)
         {

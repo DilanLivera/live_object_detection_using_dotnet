@@ -6,28 +6,27 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-namespace UI.Infrastructure.Models.TinyYoloV3;
+namespace UI.Infrastructure.Models.YoloV4;
 
 /// <summary>
-/// Implementation of the Tiny YOLOv3 object detection model.
+/// Implementation of the YOLOv4 object detection model.
 /// </summary>
-public sealed class TinyYoloV3Model : IObjectDetectionModel
+public sealed class YoloV4Model : IObjectDetectionModel
 {
-    private readonly ILogger<TinyYoloV3Model> _logger;
+    private readonly ILogger<YoloV4Model> _logger;
     private readonly InferenceSession _session;
     private readonly string[] _labels;
-    private readonly TinyYoloV3ModelConfig _modelConfig;
+    private readonly YoloV4ModelConfig _modelConfig;
 
-    public TinyYoloV3Model(
+    public YoloV4Model(
         IWebHostEnvironment environment,
-        ILogger<TinyYoloV3Model> logger,
+        ILogger<YoloV4Model> logger,
         IOptions<ObjectDetectionConfiguration> options)
     {
         _logger = logger;
-        _modelConfig = options.Value.TinyYoloV3;
+        _modelConfig = options.Value.YoloV4!;
 
         string fullModelPath = _modelConfig.GetFullModelPath(environment);
-
         _session = new InferenceSession(fullModelPath);
 
         if (!_session.InputMetadata.Any())
@@ -47,7 +46,6 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         }
 
         string labelsPath = _modelConfig.GetFullLabelsPath(environment);
-
         _labels = File.ReadAllLines(labelsPath);
     }
 
@@ -57,9 +55,8 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         try
         {
             using Image<Rgba32> resizedAndPaddedImage = ResizeAndPadImage(image, _modelConfig.ImageSize);
-
             DenseTensor<float> inputTensor = CreateTensor(resizedAndPaddedImage, _modelConfig.ImageSize);
-            DenseTensor<float> shapeTensor = new(new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
+            DenseTensor<float> shapeTensor = new(dimensions: new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
 
             return (inputTensor, shapeTensor);
         }
@@ -77,16 +74,20 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         {
             List<NamedOnnxValue> inputs =
             [
-                NamedOnnxValue.CreateFromTensor(_modelConfig.ImageInputTensorName, inputTensor),
-                NamedOnnxValue.CreateFromTensor(_modelConfig.ImageShapeTensorName, shapeTensor)
+                NamedOnnxValue.CreateFromTensor(_modelConfig.ImageInputTensorName, inputTensor)
             ];
 
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = _session.Run(inputs);
 
-            Tensor<float> boxes = outputs.First(o => o.Name == _modelConfig.BoxesOutputTensorName).AsTensor<float>();
-            Tensor<float> scores = outputs.First(o => o.Name == _modelConfig.ScoresOutputTensorName).AsTensor<float>();
+            List<Tensor<float>> boxes = _modelConfig.BoxesOutputTensorNames
+                                                    .Select(name => outputs.First(o => o.Name == name).AsTensor<float>())
+                                                    .ToList();
 
-            return new ModelOutput { Boxes = new[] { boxes }, Scores = new[] { scores } };
+            List<Tensor<float>> scores = _modelConfig.ScoresOutputTensorNames
+                                                     .Select(name => outputs.First(o => o.Name == name).AsTensor<float>())
+                                                     .ToList();
+
+            return new ModelOutput { Boxes = boxes, Scores = scores };
         }
         catch (Exception ex)
         {
@@ -99,79 +100,94 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
     public DetectionResult[] ProcessOutputs(ModelOutput modelOutput, int imageWidth, int imageHeight)
     {
         List<DetectionResult> detections = [];
-        Tensor<float> boxes = modelOutput.Boxes[0];
-        Tensor<float> scores = modelOutput.Scores[0];
 
         try
         {
-            _logger.LogDebug("Boxes shape: {BoxesShape}", string.Join(",", boxes.Dimensions.ToArray()));
-            _logger.LogDebug("Scores shape: {ScoresShape}", string.Join(",", scores.Dimensions.ToArray()));
-
-            // Process each detection from the model output
-            for (int i = 0; i < boxes.Dimensions[1]; i++)
+            for (int layerIndex = 0; layerIndex < modelOutput.Boxes.Count; layerIndex++)
             {
-                // Find the class with the highest confidence score
-                float maxScore = float.MinValue;
-                const int noValidClass = -1;
-                int bestClass = noValidClass;
+                Tensor<float> boxes = modelOutput.Boxes[layerIndex];
+                Tensor<float> scores = modelOutput.Scores[layerIndex];
 
-                for (int c = 0; c < scores.Dimensions[1]; c++)
+                _logger.LogDebug("Processing layer {LayerIndex} - Boxes shape: {BoxesShape}, Scores shape: {ScoresShape}",
+                                 layerIndex,
+                                 string.Join(",", boxes.Dimensions.ToArray()),
+                                 string.Join(",", scores.Dimensions.ToArray()));
+
+                for (int i = 0; i < boxes.Dimensions[1]; i++)
                 {
-                    float score = scores[0, c, i];
+                    float maxScore = float.MinValue;
+                    const int noValidClass = -1;
+                    int bestClass = noValidClass;
 
-                    if (!(score > maxScore))
+                    for (int c = 0; c < scores.Dimensions[1]; c++)
+                    {
+                        float score = scores[0, c, i];
+
+                        if (score > maxScore)
+                        {
+                            maxScore = score;
+                            bestClass = c;
+                        }
+                    }
+
+                    if (maxScore < _modelConfig.ConfidenceThreshold || bestClass == noValidClass)
                     {
                         continue;
                     }
 
-                    maxScore = score;
-                    bestClass = c;
+                    _logger.LogDebug("Found detection in layer {LayerIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
+                        layerIndex,
+                        bestClass,
+                        _labels[bestClass],
+                        maxScore);
+
+                    // Extract bounding box coordinates
+                    float y1 = boxes[0, i, 0];
+                    float x1 = boxes[0, i, 1];
+                    float y2 = boxes[0, i, 2];
+                    float x2 = boxes[0, i, 3];
+
+                    // Calculate width and height from coordinates
+                    float width = x2 - x1;
+                    float height = y2 - y1;
+
+                    // Target dimensions for the processed image
+                    const float processedWidth = 800f;
+                    const float processedHeight = 450f;
+
+                    // Calculate scale factors
+                    float scaleX = processedWidth / imageWidth;
+                    float scaleY = processedHeight / imageHeight;
+
+                    Box box = new()
+                              {
+                                  X = x1 * scaleX,
+                                  Y = y1 * scaleY,
+                                  Width = width * scaleX,
+                                  Height = height * scaleY
+                              };
+
+                    DetectionResult detection = new()
+                                                {
+                                                    Label = _labels[bestClass],
+                                                    Confidence = maxScore,
+                                                    Box = box
+                                                };
+
+                    _logger.LogDebug("Detection in layer {LayerIndex}: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
+                                     layerIndex,
+                                     detection.Label,
+                                     detection.Confidence,
+                                     detection.Box.X,
+                                     detection.Box.Y,
+                                     detection.Box.Width,
+                                     detection.Box.Height);
+
+                    detections.Add(detection);
                 }
-
-                if (maxScore < _modelConfig.ConfidenceThreshold || bestClass == noValidClass)
-                {
-                    continue;
-                }
-
-                _logger.LogDebug("Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
-                                 i,
-                                 bestClass,
-                                 _labels[bestClass],
-                                 maxScore);
-
-                // Extract bounding box coordinates
-                float y1 = boxes[0, i, 0];
-                float x1 = boxes[0, i, 1];
-                float y2 = boxes[0, i, 2];
-                float x2 = boxes[0, i, 3];
-
-                // Calculate width and height from coordinates
-                float width = x2 - x1;
-                float height = y2 - y1;
-
-                // Target dimensions for the processed image
-                const float processedWidth = 800f;
-                const float processedHeight = 450f;
-
-                // Calculate scale factors to convert from original to processed dimensions
-                float scaleX = processedWidth / imageWidth;
-                float scaleY = processedHeight / imageHeight;
-
-                Box box = new() { X = x1 * scaleX, Y = y1 * scaleY, Width = width * scaleX, Height = height * scaleY };
-                DetectionResult detection = new() { Label = _labels[bestClass], Confidence = maxScore, Box = box };
-
-                _logger.LogDebug("Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
-                                 detection.Label,
-                                 detection.Confidence,
-                                 detection.Box.X,
-                                 detection.Box.Y,
-                                 detection.Box.Width,
-                                 detection.Box.Height);
-
-                detections.Add(detection);
             }
 
-            // Apply Non-Maximum Suppression to remove overlapping detections
+            // Apply Non-Maximum Suppression across all layers
             detections = ApplyNonMaximumSuppression(detections.ToArray()).ToList();
         }
         catch (Exception ex)
@@ -180,16 +196,14 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
             throw;
         }
 
-        _logger.LogDebug("Total detections found: {DetectionsCount}", detections.Count);
-
+        _logger.LogDebug("Total detections found across all layers: {DetectionsCount}", detections.Count);
         return detections.ToArray();
     }
 
     private static Image<Rgba32> ResizeAndPadImage(Image<Rgba32> image, int targetSize)
     {
         // Calculate scaling factor to fit within target size while maintaining aspect ratio
-        float scale = Math.Min(targetSize / (float)image.Width,
-                               targetSize / (float)image.Height);
+        float scale = Math.Min(targetSize / (float)image.Width, targetSize / (float)image.Height);
 
         // Calculate new dimensions
         int newWidth = (int)(image.Width * scale);
@@ -200,31 +214,30 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         int yPad = (targetSize - newHeight) / 2;
 
         // Create a new black image of the target size
-        Image<Rgba32> paddedImage = new(width: targetSize, height: targetSize, Color.Black);
+        Image<Rgba32> paddedImage = new(targetSize, targetSize, Color.Black);
 
         // Resize the original image
-        image.Mutate(operation: context => context.Resize(newWidth, newHeight));
+        image.Mutate(context => context.Resize(newWidth, newHeight));
 
         // Copy the resized image into the center of the padded image
-        paddedImage.Mutate(operation: context => context.DrawImage(image,
-                                                                   backgroundLocation: new Point(xPad, yPad),
-                                                                   opacity: 1f));
+        paddedImage.Mutate(context => context.DrawImage(image, new Point(xPad, yPad), 1f));
 
         return paddedImage;
     }
 
     private static DenseTensor<float> CreateTensor(Image<Rgba32> image, int targetSize)
     {
-        DenseTensor<float> tensor = new(dimensions: new[] { 1, 3, targetSize, targetSize });
+        // YOLOv4 expects input in NHWC format (batch, height, width, channels)
+        DenseTensor<float> tensor = new(dimensions: new[] { 1, targetSize, targetSize, 3 });
 
         for (int y = 0; y < targetSize; y++)
         {
             for (int x = 0; x < targetSize; x++)
             {
                 Rgba32 pixel = image[x, y];
-                tensor[0, 0, y, x] = pixel.R / 255f; // Red channel
-                tensor[0, 1, y, x] = pixel.G / 255f; // Green channel
-                tensor[0, 2, y, x] = pixel.B / 255f; // Blue channel
+                tensor[0, y, x, 0] = pixel.R / 255f; // Red channel
+                tensor[0, y, x, 1] = pixel.G / 255f; // Green channel
+                tensor[0, y, x, 2] = pixel.B / 255f; // Blue channel
             }
         }
 
@@ -244,7 +257,7 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
             {
                 DetectionResult current = sorted[0];
                 results.Add(current);
-                sorted.RemoveAt(index: 0);
+                sorted.RemoveAt(0);
 
                 sorted.RemoveAll(r => CalculateIntersectionOverUnion(current.Box, r.Box) > _modelConfig.IntersectionOverUnionThreshold);
             }

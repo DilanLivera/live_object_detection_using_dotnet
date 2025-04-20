@@ -21,18 +21,38 @@ public interface IObjectDetectionModel : IDisposable
     /// </summary>
     /// <param name="inputTensor">Input tensor.</param>
     /// <param name="shapeTensor">Shape tensor.</param>
-    /// <returns>Raw model outputs containing boxes and scores.</returns>
-    (Tensor<float> Boxes, Tensor<float> Scores) RunInference(DenseTensor<float> inputTensor, DenseTensor<float> shapeTensor);
+    /// <returns>Raw model outputs containing boxes and scores from one or more output layers.</returns>
+    ModelOutput RunInference(DenseTensor<float> inputTensor, DenseTensor<float> shapeTensor);
 
     /// <summary>
     /// Process inference outputs to extract detection results.
     /// </summary>
-    /// <param name="boxes">The bounding box coordinates from the model.</param>
-    /// <param name="scores">The class scores from the model.</param>
+    /// <param name="modelOutput">The model outputs containing boxes and scores.</param>
     /// <param name="imageWidth">Original image width.</param>
     /// <param name="imageHeight">Original image height.</param>
     /// <returns>An array of detection results.</returns>
-    DetectionResult[] ProcessOutputs(Tensor<float> boxes, Tensor<float> scores, int imageWidth, int imageHeight);
+    DetectionResult[] ProcessOutputs(ModelOutput modelOutput, int imageWidth, int imageHeight);
+}
+
+/// <summary>
+/// Represents the output tensors from a YOLO model.
+/// This abstraction allows for different YOLO versions that may have different numbers of output layers.
+/// </summary>
+public class ModelOutput
+{
+    /// <summary>
+    /// Gets the bounding box tensors from one or more output layers.
+    /// For YOLOv3, this will contain a single tensor.
+    /// For YOLOv4, this will contain tensors from multiple output layers.
+    /// </summary>
+    public required IReadOnlyList<Tensor<float>> Boxes { get; init; }
+
+    /// <summary>
+    /// Gets the class score tensors from one or more output layers.
+    /// For YOLOv3, this will contain a single tensor.
+    /// For YOLOv4, this will contain tensors from multiple output layers.
+    /// </summary>
+    public required IReadOnlyList<Tensor<float>> Scores { get; init; }
 }
 
 /// <summary>
