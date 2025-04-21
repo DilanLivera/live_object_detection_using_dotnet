@@ -3,8 +3,10 @@
 @inject IJSRuntime JsRuntime
 @inject ILogger<Home> Logger
 @inject ObjectDetector ObjectDetector
+@inject CircuitHandler CircuitHandler
 @using UI.Infrastructure
 @using UI.Infrastructure.Models
+@using Microsoft.AspNetCore.Components.Server.Circuits
 @implements IAsyncDisposable
 
 <PageTitle>Home</PageTitle>
@@ -57,6 +59,28 @@
     private const int DetectionIntervalMs = 100;
     private int _consecutiveFailures = 0; // Track failures to prevent endless retry loops when connection is unstable
     private const int MaxConsecutiveFailures = 3;
+
+    protected override void OnInitialized()
+    {
+        if (CircuitHandler is CircuitHandlerService handler)
+        {
+            handler.CircuitClosed += HandleCircuitClosed;
+            handler.CircuitOpened += HandleCircuitOpened;
+        }
+    }
+
+    private async void HandleCircuitClosed(object? sender, Circuit circuit)
+    {
+        await StopCameraAsync();
+    }
+
+    private async void HandleCircuitOpened(object? sender, Circuit circuit)
+    {
+        if (_isCameraActive)
+        {
+            await StartCameraAsync();
+        }
+    }
 
     /// <summary>
     /// Toggles camera state between active and inactive.
@@ -195,6 +219,12 @@
         if (_detectionTimer is not null)
         {
             _detectionTimer.Dispose();
+        }
+
+        if (CircuitHandler is CircuitHandlerService handler)
+        {
+            handler.CircuitClosed -= HandleCircuitClosed;
+            handler.CircuitOpened -= HandleCircuitOpened;
         }
 
         await StopCameraAsync();

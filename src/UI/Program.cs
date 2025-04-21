@@ -1,5 +1,6 @@
 using UI.Components;
 using UI.Infrastructure;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,8 @@ builder.Services.AddHttpClient();
 builder.Services
        .AddRazorComponents()
        .AddInteractiveServerComponents();
+
+builder.Services.AddScoped<CircuitHandler, CircuitHandlerService>();
 
 builder.Services.AddObjectDetection(builder.Configuration);
 
