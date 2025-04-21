@@ -56,10 +56,14 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
     {
         try
         {
+            // Refer to the https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation/tiny-yolov3 page
+            // to find details about input to model and preprocessing steps.
             using Image<Rgba32> resizedAndPaddedImage = ResizeAndPadImage(image, _modelConfig.ImageSize);
 
-            DenseTensor<float> inputTensor = CreateTensor(resizedAndPaddedImage, _modelConfig.ImageSize);
-            DenseTensor<float> shapeTensor = new(new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
+            // Resized Image
+            DenseTensor<float> inputTensor = CreateInputTensor(resizedAndPaddedImage, _modelConfig.ImageSize);
+            // Original Image Size
+            DenseTensor<float> shapeTensor = new(dimensions: new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
 
             return (inputTensor, shapeTensor);
         }
@@ -83,8 +87,32 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
 
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = _session.Run(inputs);
 
-            Tensor<float> boxes = outputs.First(o => o.Name == _modelConfig.BoxesOutputTensorName).AsTensor<float>();
-            Tensor<float> scores = outputs.First(o => o.Name == _modelConfig.ScoresOutputTensorName).AsTensor<float>();
+            /*
+             Output from the model looks like the following
+             [
+                 {
+                   "ElementType": 1, // float
+                   "ValueType": 1, // tensor
+                   "Name": "yolonms_layer_1",
+                   "Value": [ -65.74441, -24.535715, 0.6828527, ... ]
+                 },
+                 {
+                   "ElementType": 1, // // float
+                   "ValueType": 1, // tensor
+                   "Name": "yolonms_layer_1:1",
+                   "Value": [ 3.7889149e-7, 3.2970993e-6, 3.2319445e-8, ... ]
+                 },
+                 {
+                   "ElementType": 6, // Int32
+                   "ValueType": 1, // tensor
+                   "Name": "yolonms_layer_1:2",
+                   "Value": []
+                 }
+               ]
+             */
+
+            Tensor<float> boxes = outputs.First(o => o.Name == "yolonms_layer_1").AsTensor<float>();
+            Tensor<float> scores = outputs.First(o => o.Name == "yolonms_layer_1:1").AsTensor<float>();
 
             return (boxes, scores);
         }
@@ -102,28 +130,33 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
 
         try
         {
-            _logger.LogDebug("Boxes shape: {BoxesShape}", string.Join(",", boxes.Dimensions.ToArray()));
-            _logger.LogDebug("Scores shape: {ScoresShape}", string.Join(",", scores.Dimensions.ToArray()));
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Boxes shape: {BoxesShape}", string.Join(",", boxes.Dimensions.ToArray()));
+                _logger.LogDebug("Scores shape: {ScoresShape}", string.Join(",", scores.Dimensions.ToArray()));
+            }
 
-            // Process each detection from the model output
-            for (int i = 0; i < boxes.Dimensions[1]; i++)
+            // Process each detection from the model output.
+            const int numberOfCandidateBoxesIndex = 1;
+            const int batchSize = 0; // 0 because we are processing one image at a time
+
+            for (int candidateBoxIndex = 0; candidateBoxIndex < boxes.Dimensions[numberOfCandidateBoxesIndex]; candidateBoxIndex++)
             {
                 // Find the class with the highest confidence score
                 float maxScore = float.MinValue;
                 const int noValidClass = -1;
                 int bestClass = noValidClass;
 
-                for (int c = 0; c < scores.Dimensions[1]; c++)
+                const int numberOfClassesIndex = 1;
+                for (int classIndex = 0; classIndex < scores.Dimensions[numberOfClassesIndex]; classIndex++)
                 {
-                    float score = scores[0, c, i];
+                    float score = scores[batchSize, classIndex, candidateBoxIndex];
 
-                    if (!(score > maxScore))
+                    if (score > maxScore)
                     {
-                        continue;
+                        maxScore = score;
+                        bestClass = classIndex;
                     }
-
-                    maxScore = score;
-                    bestClass = c;
                 }
 
                 if (maxScore < _modelConfig.ConfidenceThreshold || bestClass == noValidClass)
@@ -132,16 +165,16 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                 }
 
                 _logger.LogDebug("Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
-                                 i,
+                                 candidateBoxIndex,
                                  bestClass,
                                  _labels[bestClass],
                                  maxScore);
 
                 // Extract bounding box coordinates
-                float y1 = boxes[0, i, 0];
-                float x1 = boxes[0, i, 1];
-                float y2 = boxes[0, i, 2];
-                float x2 = boxes[0, i, 3];
+                float y1 = boxes[batchSize, candidateBoxIndex, 0]; // 0 = top coordinate = y1
+                float x1 = boxes[batchSize, candidateBoxIndex, 1]; // 1 = left coordinate = x1
+                float y2 = boxes[batchSize, candidateBoxIndex, 2]; // 2 = bottom coordinate = y2
+                float x2 = boxes[batchSize, candidateBoxIndex, 3]; // 3 = right coordinate = x2
 
                 // Calculate width and height from coordinates
                 float width = x2 - x1;
@@ -206,9 +239,14 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         return paddedImage;
     }
 
-    private static DenseTensor<float> CreateTensor(Image<Rgba32> image, int targetSize)
+    private static DenseTensor<float> CreateInputTensor(Image<Rgba32> image, int targetSize)
     {
-        DenseTensor<float> tensor = new(dimensions: new[] { 1, 3, targetSize, targetSize });
+        const int batchSize = 1;
+        const int numberOfChannels = 3; // RGB
+        const int height = 416;
+        const int width = 416;
+
+        DenseTensor<float> tensor = new(dimensions: new[] { batchSize, numberOfChannels, height, width });
 
         for (int y = 0; y < targetSize; y++)
         {
