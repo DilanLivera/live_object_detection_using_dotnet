@@ -15,20 +15,6 @@ window.CameraManager = {
     async initializeCamera(videoElementId) {
         const cameraInitialized = true;
 
-        if (this.COMPRESSION.useGzip && !window.pako) {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement("script");
-                script.src = "https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js";
-                script.onload = resolve;
-                script.onerror = () => {
-                    console.warn("Failed to load Pako compression library, falling back to uncompressed transfer");
-                    this.COMPRESSION.useGzip = false;
-                    resolve();
-                };
-                document.head.appendChild(script);
-            });
-        }
-
         const videoElement = document.getElementById(videoElementId);
 
         if (!videoElement) {
