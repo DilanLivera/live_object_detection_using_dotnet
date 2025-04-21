@@ -2,6 +2,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using UI.Infrastructure.Models;
+using System.IO.Compression;
 
 namespace UI.Infrastructure;
 
@@ -23,15 +24,34 @@ public sealed class ObjectDetector
     }
 
     /// <summary>
+    /// Decompresses GZIP compressed data
+    /// </summary>
+    /// <param name="compressedData">The compressed data</param>
+    /// <returns>Decompressed data</returns>
+    private byte[] DecompressGzip(byte[] compressedData)
+    {
+        using MemoryStream? compressedStream = new(compressedData);
+        using GZipStream? gzipStream = new(compressedStream, CompressionMode.Decompress);
+        using MemoryStream? resultStream = new();
+
+        gzipStream.CopyTo(resultStream);
+        return resultStream.ToArray();
+    }
+
+    /// <summary>
     /// Detects objects in the provided image using the configured model.
     /// </summary>
-    /// <param name="imageData">The image to process.</param>
+    /// <param name="imageData">The image data to process</param>
+    /// <param name="isCompressed">Whether the image data is GZIP compressed</param>
     /// <returns>An array of detection results, each containing a label, confidence score, and bounding box.</returns>
-    public DetectionResult[] Detect(byte[] imageData)
+    public DetectionResult[] Detect(byte[] imageData, bool isCompressed = false)
     {
         try
         {
-            using Image<Rgba32> image = Image.Load<Rgba32>(imageData);
+            // Decompress if needed
+            byte[] processedImageData = isCompressed ? DecompressGzip(imageData) : imageData;
+
+            using Image<Rgba32> image = Image.Load<Rgba32>(processedImageData);
 
             (DenseTensor<float> inputTensor, DenseTensor<float> shapeTensor) = _model.PreprocessImage(image);
 
