@@ -2,10 +2,9 @@ window.CameraManager = {
     // Stores active camera streams mapped by their video element IDs
     activeStreams: new Map(),
 
-    PROCESSED_DIMENSIONS: {
-        width: 800, // Width used for both capture and detection
-        height: 450, // Height used for both capture and detection
-        jpegQuality: 0.5, // JPEG quality set to 0.5 (50%) as higher quality causes processing errors
+    COMPRESSION: {
+        quality: 0.75, // 70% quality for transfer to prevent SignalR issues
+        useGzip: true, // Enable GZIP compression
     },
 
     /**
@@ -16,17 +15,29 @@ window.CameraManager = {
     async initializeCamera(videoElementId) {
         const cameraInitialized = true;
 
+        if (this.COMPRESSION.useGzip && !window.pako) {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = "https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js";
+                script.onload = resolve;
+                script.onerror = () => {
+                    console.warn("Failed to load Pako compression library, falling back to uncompressed transfer");
+                    this.COMPRESSION.useGzip = false;
+                    resolve();
+                };
+                document.head.appendChild(script);
+            });
+        }
+
         const videoElement = document.getElementById(videoElementId);
 
-        if (videoElement == null) {
+        if (!videoElement) {
             throw new Error("Video element not found");
         }
 
         try {
             const video = {
-                facingMode: "environment",
-                width: {ideal: 1280},
-                height: {ideal: 720},
+                facingMode: "environment"
             };
             const stream = await navigator.mediaDevices.getUserMedia({video});
 
@@ -54,7 +65,7 @@ window.CameraManager = {
     stopCamera(videoElementId) {
         const videoElement = document.getElementById(videoElementId);
 
-        if (videoElement == null || videoElement.srcObject == null) {
+        if (!videoElement || !videoElement.srcObject) {
             throw new Error("Video element or source object is null");
         }
 
@@ -67,7 +78,7 @@ window.CameraManager = {
     /**
      * Captures a single frame from the video stream and returns it as a byte array.
      * @param {string} videoElementId - ID of the video element to capture from
-     * @returns {Promise<Uint8Array|null>} Byte array of the captured frame or null if capture fails
+     * @returns {Promise<{data: Uint8Array, isCompressed: boolean}|null>} Byte array and compression flag
      */
     async captureFrame(videoElementId) {
         const videoElement = document.getElementById(videoElementId);
@@ -89,41 +100,36 @@ window.CameraManager = {
         }
 
         const captureCanvas = document.createElement("canvas");
+        const canvasRenderingContext2D = captureCanvas.getContext("2d");
 
-        if (captureCanvas == null) {
-            throw new Error("Failed to create canvas element");
-        }
-
-        captureCanvas.width = this.PROCESSED_DIMENSIONS.width;
-        captureCanvas.height = this.PROCESSED_DIMENSIONS.height;
-
-        const contextId = "2d";
-        const canvasRenderingContext2D = captureCanvas.getContext(contextId);
-
-        if (canvasRenderingContext2D == null) {
-            throw new Error("Failed to get 2D rendering context");
+        if (!canvasRenderingContext2D) {
+            console.error("Failed to get 2D rendering context");
+            return null;
         }
 
         try {
+            captureCanvas.width = videoElement.videoWidth;
+            captureCanvas.height = videoElement.videoHeight;
+
             const dx = 0, dy = 0;
-            canvasRenderingContext2D.drawImage(
-                videoElement,
-                dx,
-                dy,
-                this.PROCESSED_DIMENSIONS.width,
-                this.PROCESSED_DIMENSIONS.height);
+            canvasRenderingContext2D.drawImage(videoElement, dx, dy);
 
             const type = "image/jpeg";
-            const blob = await new Promise(
-                // JPEG quality set to 0.5 (50%) as higher quality at 800x450 resolution causes processing errors
-                (resolve) => captureCanvas.toBlob(resolve, type, this.PROCESSED_DIMENSIONS.jpegQuality));
+            const blob = await new Promise((resolve) => captureCanvas.toBlob(resolve, type, this.COMPRESSION.quality));
 
-            if (blob == null) {
-                throw new Error("Failed to create blob from canvas");
+            if (!blob) {
+                throw new Error("Failed to create blob");
             }
 
             const arrayBuffer = await blob.arrayBuffer();
-            return new Uint8Array(arrayBuffer);
+            const image = new Uint8Array(arrayBuffer);
+
+            const compressedData = this.compressData(image);
+
+            return {
+                data: compressedData,
+                isCompressed: compressedData !== image,
+            };
         } catch (error) {
             console.error("Error capturing frame:", error);
             return null;
@@ -180,39 +186,35 @@ window.CameraManager = {
             throw new Error(`Video element with ID '${videoElementId}' not found`);
         }
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
 
-        const contextId = "2d";
-        const canvasRenderingContext2D = canvas.getContext(contextId);
-
-        if (canvasRenderingContext2D == null) {
+        const canvasRenderingContext2D = canvas.getContext("2d");
+        if (!canvasRenderingContext2D) {
             throw new Error("Failed to get 2D rendering context");
         }
 
         try {
-
             const x = 0, y = 0;
             canvasRenderingContext2D.clearRect(x, y, canvas.width, canvas.height);
 
             const scale = {
-                x: canvas.width / this.PROCESSED_DIMENSIONS.width,
-                y: canvas.height / this.PROCESSED_DIMENSIONS.height,
+                x: canvas.width / video.videoWidth,
+                y: canvas.height / video.videoHeight,
             };
 
             canvasRenderingContext2D.lineWidth = STYLES.lineWidth;
             canvasRenderingContext2D.font = STYLES.font;
             canvasRenderingContext2D.textBaseline = "top";
 
-            detections.forEach((detection, index) => {
+            detections.forEach((detection) => {
                 const {label, confidence, box} = detection;
-                const {x, y, width, height} = box;
 
                 const scaledBox = {
-                    x: x * scale.x,
-                    y: y * scale.y,
-                    width: width * scale.x,
-                    height: height * scale.y,
+                    x: box.x * scale.x,
+                    y: box.y * scale.y,
+                    width: box.width * scale.x,
+                    height: box.height * scale.y,
                 };
 
                 this.drawBox(canvasRenderingContext2D, scaledBox, STYLES);
@@ -230,13 +232,13 @@ window.CameraManager = {
 
     /**
      * Draw a bounding box
-     * @param {CanvasRenderingContext2D} CanvasRenderingContext2D - Canvas context
+     * @param {CanvasRenderingContext2D} canvasRenderingContext2D - Canvas context
      * @param {Object} scaledBox - Box coordinates and dimensions
      * @param {Object} styles - Styling options
      */
-    drawBox(CanvasRenderingContext2D, scaledBox, styles) {
-        CanvasRenderingContext2D.strokeStyle = styles.boxColor;
-        CanvasRenderingContext2D.strokeRect(
+    drawBox(canvasRenderingContext2D, scaledBox, styles) {
+        canvasRenderingContext2D.strokeStyle = styles.boxColor;
+        canvasRenderingContext2D.strokeRect(
             scaledBox.x,
             scaledBox.y,
             scaledBox.width,
@@ -245,27 +247,53 @@ window.CameraManager = {
 
     /**
      * Draw label
-     * @param {CanvasRenderingContext2D} CanvasRenderingContext2D - Canvas context
+     * @param {CanvasRenderingContext2D} canvasRenderingContext2D - Canvas context
      * @param {string} label - Detection label
      * @param {number} confidence - Detection confidence
      * @param {Object} box - Box coordinates and dimensions
      * @param {Object} styles - Styling options
      */
-    drawLabel(CanvasRenderingContext2D, label, confidence, box, styles) {
+    drawLabel(canvasRenderingContext2D, label, confidence, box, styles) {
         const labelText = `${label} (${(confidence * 100).toFixed(1)}%)`;
-        const textMetrics = CanvasRenderingContext2D.measureText(labelText);
+        const textMetrics = canvasRenderingContext2D.measureText(labelText);
 
-        CanvasRenderingContext2D.fillStyle = `rgba(0, 0, 0, ${styles.labelBackgroundAlpha})`;
-        CanvasRenderingContext2D.fillRect(
+        canvasRenderingContext2D.fillStyle = `rgba(0, 0, 0, ${styles.labelBackgroundAlpha})`;
+        canvasRenderingContext2D.fillRect(
             box.x,
             box.y - styles.textHeight,
             textMetrics.width + styles.labelPadding * 2,
             styles.textHeight);
 
-        CanvasRenderingContext2D.fillStyle = styles.textColor;
-        CanvasRenderingContext2D.fillText(
+        canvasRenderingContext2D.fillStyle = styles.textColor;
+        canvasRenderingContext2D.fillText(
             labelText,
             box.x + styles.labelPadding,
             box.y - styles.textHeight + styles.labelPadding);
+    },
+
+    /**
+     * Compresses data using GZIP
+     * @param {Uint8Array} data - Data to compress
+     * @returns {Uint8Array} Compressed data
+     */
+    compressData(data) {
+        if (!this.COMPRESSION.useGzip || !window.pako) {
+            return data;
+        }
+
+        try {
+            const compressed = window.pako.gzip(data);
+            const compressionStats = {
+                originalSize: `${(data.length / 1024).toFixed(2)}KB`,
+                compressedSize: `${(compressed.length / 1024).toFixed(2)}KB`,
+                reductionPercent: `${(100 - (compressed.length / data.length) * 100).toFixed(1)}% reduction`,
+            };
+            console.dir("Compression Stats:" + " " + JSON.stringify(compressionStats));
+
+            return compressed;
+        } catch (error) {
+            console.error("Compression failed:", error);
+            return data;
+        }
     },
 };

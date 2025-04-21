@@ -145,9 +145,9 @@
                         break;
                     }
 
-                    byte[] image = await JsRuntime.InvokeAsync<byte[]>(identifier: "CameraManager.captureFrame", args: "cameraFeed");
+                    CapturedImage image = await JsRuntime.InvokeAsync<CapturedImage>(identifier: "CameraManager.captureFrame", "cameraFeed");
 
-                    if (image.Length == 0)
+                    if (image.Data.Length == 0)
                     {
                         Logger.LogWarning("Failed to capture frame: No image data received");
                         _consecutiveFailures++;
@@ -157,10 +157,7 @@
                     // Allow recovery from temporary connection issues
                     _consecutiveFailures = 0;
 
-                    // Generate and draw fake detections
-                    // var fakeDetections = GenerateFakeDetections();
-
-                    DetectionResult[] detections = ObjectDetector.Detect(image);
+                    DetectionResult[] detections = ObjectDetector.Detect(image.Data, image.IsCompressed);
 
                     await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", "cameraFeed", detections);
                 }
@@ -176,7 +173,8 @@
                     _consecutiveFailures++;
                     Logger.LogError(ex,
                                     "Detection error (attempt {Attempt} of {Max})",
-                                    _consecutiveFailures, MaxConsecutiveFailures);
+                                    _consecutiveFailures,
+                                    MaxConsecutiveFailures);
                 }
             }
         }
@@ -185,6 +183,11 @@
             _error = $"Detection loop error: {ex.Message}";
             await StopCameraAsync();
         }
+    }
+
+    private class CapturedImage {
+        public byte[] Data { get; init; } = [];
+        public bool IsCompressed { get; init; }
     }
 
     public async ValueTask DisposeAsync()
