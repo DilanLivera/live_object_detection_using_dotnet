@@ -4,6 +4,7 @@
 @inject ILogger<Home> Logger
 @inject ObjectDetector ObjectDetector
 @inject CircuitHandler CircuitHandler
+@using System.IO.Compression
 @using UI.Infrastructure
 @using UI.Infrastructure.Models
 @using Microsoft.AspNetCore.Components.Server.Circuits
@@ -181,7 +182,9 @@
                     // Allow recovery from temporary connection issues
                     _consecutiveFailures = 0;
 
-                    DetectionResult[] detections = ObjectDetector.Detect(image.Data, image.IsCompressed);
+                    byte[] processedImageData = image.IsCompressed ? DecompressGzip(image.Data) : image.Data;
+
+                    DetectionResult[] detections = ObjectDetector.Detect(processedImageData);
 
                     await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", "cameraFeed", detections);
                 }
@@ -209,9 +212,20 @@
         }
     }
 
-    private class CapturedImage {
-        public byte[] Data { get; init; } = [];
-        public bool IsCompressed { get; init; }
+    /// <summary>
+    /// Decompresses GZIP compressed data
+    /// </summary>
+    /// <param name="compressedData">The compressed data</param>
+    /// <returns>Decompressed data</returns>
+    private byte[] DecompressGzip(byte[] compressedData)
+    {
+        using MemoryStream compressedStream = new(compressedData);
+        using GZipStream gzipStream = new(compressedStream, CompressionMode.Decompress);
+        using MemoryStream resultStream = new();
+
+        gzipStream.CopyTo(resultStream);
+
+        return resultStream.ToArray();
     }
 
     public async ValueTask DisposeAsync()
@@ -228,6 +242,11 @@
         }
 
         await StopCameraAsync();
+    }
+
+    private class CapturedImage {
+        public byte[] Data { get; init; } = [];
+        public bool IsCompressed { get; init; }
     }
 
 }
