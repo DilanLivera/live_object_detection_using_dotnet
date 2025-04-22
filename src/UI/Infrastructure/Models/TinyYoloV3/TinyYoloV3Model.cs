@@ -176,10 +176,6 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                 float y2 = boxes[batchSize, candidateBoxIndex, 2]; // 2 = bottom coordinate = y2
                 float x2 = boxes[batchSize, candidateBoxIndex, 3]; // 3 = right coordinate = x2
 
-                // Calculate width and height from coordinates
-                float width = x2 - x1;
-                float height = y2 - y1;
-
                 // Target dimensions for the processed image
                 const float processedWidth = 800f;
                 const float processedHeight = 450f;
@@ -188,8 +184,8 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                 float scaleX = processedWidth / imageWidth;
                 float scaleY = processedHeight / imageHeight;
 
-                Box box = new() { X = x1 * scaleX, Y = y1 * scaleY, Width = width * scaleX, Height = height * scaleY };
-                DetectionResult detection = new() { Label = _labels[bestClass], Confidence = maxScore, Box = box };
+                Box box = new(x1, y1, x2, y2, scaleX, scaleY);
+                DetectionResult detection = new(_labels[bestClass], maxScore, box);
 
                 _logger.LogDebug("Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
                                  detection.Label,
