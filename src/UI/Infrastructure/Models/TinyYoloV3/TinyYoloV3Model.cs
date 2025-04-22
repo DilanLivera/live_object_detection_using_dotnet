@@ -13,6 +13,9 @@ namespace UI.Infrastructure.Models.TinyYoloV3;
 /// </summary>
 public sealed class TinyYoloV3Model : IObjectDetectionModel
 {
+    private const int BatchSize = 0;
+    private const int NumberOfCandidateBoxesIndex = 1;
+    private const int NumberOfClassesIndex = 1;
     private readonly ILogger<TinyYoloV3Model> _logger;
     private readonly InferenceSession _session;
     private readonly string[] _labels;
@@ -137,32 +140,19 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
             }
 
             // Process each detection from the model output.
-            const int numberOfCandidateBoxesIndex = 1;
-            const int batchSize = 0; // 0 because we are processing one image at a time
 
-            for (int candidateBoxIndex = 0; candidateBoxIndex < boxes.Dimensions[numberOfCandidateBoxesIndex]; candidateBoxIndex++)
+            for (int candidateBoxIndex = 0; candidateBoxIndex < boxes.Dimensions[NumberOfCandidateBoxesIndex]; candidateBoxIndex++)
             {
-                // Find the class with the highest confidence score
-                float maxScore = float.MinValue;
-                const int noValidClass = -1;
-                int bestClass = noValidClass;
+                (int ClassIndex, float Score)? bestClassAndAndHighestConfidenceScore = FindBestClassIndexAndHighestConfidenceScore(scores, batchIndex: BatchSize, candidateBoxIndex);
 
-                const int numberOfClassesIndex = 1;
-                for (int classIndex = 0; classIndex < scores.Dimensions[numberOfClassesIndex]; classIndex++)
-                {
-                    float score = scores[batchSize, classIndex, candidateBoxIndex];
-
-                    if (score > maxScore)
-                    {
-                        maxScore = score;
-                        bestClass = classIndex;
-                    }
-                }
-
-                if (maxScore < _modelConfig.ConfidenceThreshold || bestClass == noValidClass)
+                // Skip if no valid class or score below threshold
+                if (bestClassAndAndHighestConfidenceScore == null || bestClassAndAndHighestConfidenceScore.Value.Score < _modelConfig.ConfidenceThreshold)
                 {
                     continue;
                 }
+
+                int bestClass = bestClassAndAndHighestConfidenceScore.Value.ClassIndex;
+                float maxScore = bestClassAndAndHighestConfidenceScore.Value.Score;
 
                 _logger.LogDebug("Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
                                  candidateBoxIndex,
@@ -171,10 +161,10 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                                  maxScore);
 
                 // Extract bounding box coordinates
-                float y1 = boxes[batchSize, candidateBoxIndex, 0]; // 0 = top coordinate = y1
-                float x1 = boxes[batchSize, candidateBoxIndex, 1]; // 1 = left coordinate = x1
-                float y2 = boxes[batchSize, candidateBoxIndex, 2]; // 2 = bottom coordinate = y2
-                float x2 = boxes[batchSize, candidateBoxIndex, 3]; // 3 = right coordinate = x2
+                float y1 = boxes[BatchSize, candidateBoxIndex, 0]; // 0 = top coordinate = y1
+                float x1 = boxes[BatchSize, candidateBoxIndex, 1]; // 1 = left coordinate = x1
+                float y2 = boxes[BatchSize, candidateBoxIndex, 2]; // 2 = bottom coordinate = y2
+                float x2 = boxes[BatchSize, candidateBoxIndex, 3]; // 3 = right coordinate = x2
 
                 // Target dimensions for the processed image
                 const float processedWidth = 800f;
@@ -298,6 +288,20 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
 
         return intersectionArea / (box1Area + box2Area - intersectionArea);
     }
+
+    /// <summary>
+    /// Finds the class index with the highest confidence score for a given candidate box.
+    /// </summary>
+    /// <param name="scores">The scores tensor from model output</param>
+    /// <param name="batchIndex">The batch index (usually 0)</param>
+    /// <param name="candidateBoxIndex">The index of the candidate box</param>
+    /// <returns>The class index and score with the highest confidence, or null if none found</returns>
+    private static (int ClassIndex, float Score)? FindBestClassIndexAndHighestConfidenceScore(
+        Tensor<float> scores,
+        int batchIndex,
+        int candidateBoxIndex) => Enumerable.Range(0, scores.Dimensions[NumberOfClassesIndex])
+                                            .Select(classIndex => (ClassIndex: classIndex, Score: scores[batchIndex, classIndex, candidateBoxIndex]))
+                                            .MaxBy(item => item.Score);
 
     public void Dispose() => _session.Dispose();
 }
