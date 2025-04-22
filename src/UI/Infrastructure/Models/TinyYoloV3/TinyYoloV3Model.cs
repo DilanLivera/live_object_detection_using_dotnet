@@ -184,16 +184,16 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                 float scaleX = processedWidth / imageWidth;
                 float scaleY = processedHeight / imageHeight;
 
-                Box box = new(x1, y1, x2, y2, scaleX, scaleY);
-                DetectionResult detection = new(_labels[bestClass], maxScore, box);
+                BoundingBox boundingBox = new(x1, y1, x2, y2, scaleX, scaleY);
+                DetectionResult detection = new(_labels[bestClass], maxScore, boundingBox);
 
                 _logger.LogDebug("Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
                                  detection.Label,
                                  detection.Confidence,
-                                 detection.Box.X,
-                                 detection.Box.Y,
-                                 detection.Box.Width,
-                                 detection.Box.Height);
+                                 detection.BoundingBox.X,
+                                 detection.BoundingBox.Y,
+                                 detection.BoundingBox.Width,
+                                 detection.BoundingBox.Height);
 
                 detections.Add(detection);
             }
@@ -273,14 +273,14 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                 results.Add(current);
                 sorted.RemoveAt(index: 0);
 
-                sorted.RemoveAll(r => CalculateIntersectionOverUnion(current.Box, r.Box) > _modelConfig.IntersectionOverUnionThreshold);
+                sorted.RemoveAll(r => CalculateIntersectionOverUnion(current.BoundingBox, r.BoundingBox) > _modelConfig.IntersectionOverUnionThreshold);
             }
         }
 
         return results.ToArray();
     }
 
-    private static float CalculateIntersectionOverUnion(Box box1, Box box2)
+    private static float CalculateIntersectionOverUnion(BoundingBox box1, BoundingBox box2)
     {
         float intersectionX = Math.Max(box1.X, box2.X);
         float intersectionY = Math.Max(box1.Y, box2.Y);

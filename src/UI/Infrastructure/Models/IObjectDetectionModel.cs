@@ -55,20 +55,20 @@ public struct DetectionResult
     /// <summary>
     /// Bounding box.
     /// </summary>
-    public Box Box { get; }
+    public BoundingBox BoundingBox { get; }
 
     /// <summary>
     /// Creates a new DetectionResult from model outputs
     /// </summary>
     /// <param name="label">Class label</param>
     /// <param name="confidence">Confidence score</param>
-    /// <param name="box">Bounding box</param>
+    /// <param name="boundingBox">Bounding box</param>
     /// <returns>A new DetectionResult instance</returns>
-    public DetectionResult(string label, float confidence, Box box)
+    public DetectionResult(string label, float confidence, BoundingBox boundingBox)
     {
         Label = label;
         Confidence = confidence;
-        Box = box;
+        BoundingBox = boundingBox;
     }
 }
 
@@ -78,7 +78,7 @@ public struct DetectionResult
 /// JavaScript destructuring: const { x, y, width, height } = box;
 /// All values are normalized (0-1) representing percentage of image dimensions.
 /// </summary>
-public struct Box
+public struct BoundingBox
 {
     public float X { get; } // Normalized x-coordinate (0-1)
     public float Y { get; } // Normalized y-coordinate (0-1)
@@ -95,7 +95,7 @@ public struct Box
     /// <param name="scaleX">X scaling factor</param>
     /// <param name="scaleY">Y scaling factor</param>
     /// <returns>A new Box instance with scaled coordinates</returns>
-    public Box(float x1, float y1, float x2, float y2, float scaleX, float scaleY)
+    public BoundingBox(float x1, float y1, float x2, float y2, float scaleX, float scaleY)
     {
         X = x1 * scaleX;
         Y = y1 * scaleY;

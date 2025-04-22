@@ -147,7 +147,7 @@ window.CameraManager = {
      * Draws object detection results on the specified canvas.
      * @param {string} canvasId - ID of the canvas to draw on
      * @param {string} videoElementId - ID of the video element to get dimensions from
-     * @param {Array<{label: string, confidence: number, box: {x: number, y: number, width: number, height: number}}>} detections - Array of detection results
+     * @param {Array<{label: string, confidence: number, boundingBox: {x: number, y: number, width: number, height: number}}>} detections - Array of detection results
      */
     drawDetections(canvasId, videoElementId, detections) {
         const STYLES = {
@@ -194,16 +194,16 @@ window.CameraManager = {
             canvasRenderingContext2D.textBaseline = "top";
 
             detections.forEach((detection) => {
-                const {label, confidence, box} = detection;
+                const {label, confidence, boundingBox} = detection;
 
                 const scaledBox = {
-                    x: box.x * scale.x,
-                    y: box.y * scale.y,
-                    width: box.width * scale.x,
-                    height: box.height * scale.y,
+                    x: boundingBox.x * scale.x,
+                    y: boundingBox.y * scale.y,
+                    width: boundingBox.width * scale.x,
+                    height: boundingBox.height * scale.y,
                 };
 
-                this.drawBox(canvasRenderingContext2D, scaledBox, STYLES);
+                this.drawBoundingBox(canvasRenderingContext2D, scaledBox, STYLES);
                 this.drawLabel(
                     canvasRenderingContext2D,
                     label,
@@ -222,7 +222,7 @@ window.CameraManager = {
      * @param {Object} scaledBox - Box coordinates and dimensions
      * @param {Object} styles - Styling options
      */
-    drawBox(canvasRenderingContext2D, scaledBox, styles) {
+    drawBoundingBox(canvasRenderingContext2D, scaledBox, styles) {
         canvasRenderingContext2D.strokeStyle = styles.boxColor;
         canvasRenderingContext2D.strokeRect(
             scaledBox.x,
@@ -236,25 +236,25 @@ window.CameraManager = {
      * @param {CanvasRenderingContext2D} canvasRenderingContext2D - Canvas context
      * @param {string} label - Detection label
      * @param {number} confidence - Detection confidence
-     * @param {Object} box - Box coordinates and dimensions
+     * @param {Object} boundingBox - Box coordinates and dimensions
      * @param {Object} styles - Styling options
      */
-    drawLabel(canvasRenderingContext2D, label, confidence, box, styles) {
+    drawLabel(canvasRenderingContext2D, label, confidence, boundingBox, styles) {
         const labelText = `${label} (${(confidence * 100).toFixed(1)}%)`;
         const textMetrics = canvasRenderingContext2D.measureText(labelText);
 
         canvasRenderingContext2D.fillStyle = `rgba(0, 0, 0, ${styles.labelBackgroundAlpha})`;
         canvasRenderingContext2D.fillRect(
-            box.x,
-            box.y - styles.textHeight,
+            boundingBox.x,
+            boundingBox.y - styles.textHeight,
             textMetrics.width + styles.labelPadding * 2,
             styles.textHeight);
 
         canvasRenderingContext2D.fillStyle = styles.textColor;
         canvasRenderingContext2D.fillText(
             labelText,
-            box.x + styles.labelPadding,
-            box.y - styles.textHeight + styles.labelPadding);
+            boundingBox.x + styles.labelPadding,
+            boundingBox.y - styles.textHeight + styles.labelPadding);
     },
 
     /**
