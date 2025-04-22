@@ -40,11 +40,36 @@ public interface IObjectDetectionModel : IDisposable
 /// IMPORTANT: Property names must match the JavaScript object properties exactly as they are used in camera.js.
 /// JavaScript destructuring: const { label, confidence, box } = detection;
 /// </summary>
-public class DetectionResult
+public struct DetectionResult
 {
-    public string Label { get; init; } = "";
-    public float Confidence { get; init; }
-    public Box Box { get; init; } = new();
+    /// <summary>
+    /// Class label.
+    /// </summary>
+    public string Label { get; }
+
+    /// <summary>
+    /// Confidence score.
+    /// </summary>
+    public float Confidence { get; }
+
+    /// <summary>
+    /// Bounding box.
+    /// </summary>
+    public Box Box { get; }
+
+    /// <summary>
+    /// Creates a new DetectionResult from model outputs
+    /// </summary>
+    /// <param name="label">Class label</param>
+    /// <param name="confidence">Confidence score</param>
+    /// <param name="box">Bounding box</param>
+    /// <returns>A new DetectionResult instance</returns>
+    public DetectionResult(string label, float confidence, Box box)
+    {
+        Label = label;
+        Confidence = confidence;
+        Box = box;
+    }
 }
 
 /// <summary>
@@ -53,10 +78,28 @@ public class DetectionResult
 /// JavaScript destructuring: const { x, y, width, height } = box;
 /// All values are normalized (0-1) representing percentage of image dimensions.
 /// </summary>
-public class Box
+public struct Box
 {
-    public float X { get; init; } // Normalized x-coordinate (0-1)
-    public float Y { get; init; } // Normalized y-coordinate (0-1)
-    public float Width { get; init; } // Normalized width (0-1)
-    public float Height { get; init; } // Normalized height (0-1)
+    public float X { get; } // Normalized x-coordinate (0-1)
+    public float Y { get; } // Normalized y-coordinate (0-1)
+    public float Width { get; } // Normalized width (0-1)
+    public float Height { get; } // Normalized height (0-1)
+
+    /// <summary>
+    /// Creates a scaled Box from coordinates
+    /// </summary>
+    /// <param name="x1">Left coordinate</param>
+    /// <param name="y1">Top coordinate</param>
+    /// <param name="x2">Right coordinate</param>
+    /// <param name="y2">Bottom coordinate</param>
+    /// <param name="scaleX">X scaling factor</param>
+    /// <param name="scaleY">Y scaling factor</param>
+    /// <returns>A new Box instance with scaled coordinates</returns>
+    public Box(float x1, float y1, float x2, float y2, float scaleX, float scaleY)
+    {
+        X = x1 * scaleX;
+        Y = y1 * scaleY;
+        Width = (x2 - x1) * scaleX;
+        Height = (y2 - y1) * scaleY;
+    }
 }
