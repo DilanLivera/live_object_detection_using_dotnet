@@ -43,6 +43,7 @@ public sealed class ObjectDetector
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during object detection");
+
             throw;
         }
     }

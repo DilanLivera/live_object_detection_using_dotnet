@@ -41,11 +41,17 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         if (_logger.IsEnabled(LogLevel.Debug))
         {
             var inputMetadata = _session.InputMetadata
-                                        .Select(input => new { Name = input.Key, Shape = input.Value.Dimensions });
+                                        .Select(input => new
+                                                         {
+                                                             Name = input.Key, Shape = input.Value.Dimensions
+                                                         });
             logger.LogDebug("Model Input Names: {ModelInputNames}", JsonSerializer.Serialize(inputMetadata));
 
             var outputMetadata = _session.OutputMetadata
-                                         .Select(output => new { Name = output.Key, Shape = output.Value.Dimensions });
+                                         .Select(output => new
+                                                           {
+                                                               Name = output.Key, Shape = output.Value.Dimensions
+                                                           });
             logger.LogDebug("Model Output Names: {ModelOutputNames}", JsonSerializer.Serialize(outputMetadata));
         }
 
@@ -66,13 +72,20 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
             // Resized Image
             DenseTensor<float> inputTensor = CreateInputTensor(resizedAndPaddedImage, _modelConfig.ImageSize);
             // Original Image Size
-            DenseTensor<float> shapeTensor = new(dimensions: new[] { 1, 2 }) { [0, 0] = image.Height, [0, 1] = image.Width };
+            DenseTensor<float> shapeTensor = new(dimensions: new[]
+                                                             {
+                                                                 1, 2
+                                                             })
+                                             {
+                                                 [0, 0] = image.Height, [0, 1] = image.Width
+                                             };
 
             return (inputTensor, shapeTensor);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error preprocessing image");
+
             throw;
         }
     }
@@ -122,6 +135,7 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error running model inference");
+
             throw;
         }
     }
@@ -194,6 +208,7 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing model outputs");
+
             throw;
         }
 
@@ -232,7 +247,10 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
         const int height = 416;
         const int width = 416;
 
-        DenseTensor<float> tensor = new(dimensions: new[] { batchSize, numberOfChannels, height, width });
+        DenseTensor<float> tensor = new(dimensions: new[]
+                                                    {
+                                                        batchSize, numberOfChannels, height, width
+                                                    });
 
         for (int y = 0; y < targetSize; y++)
         {

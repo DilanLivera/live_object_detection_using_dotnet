@@ -111,6 +111,7 @@
             if (!isCameraInitialized)
             {
                 _error = "Failed to initialize camera. Please ensure camera permissions are granted.";
+
                 return;
             }
 
@@ -167,6 +168,7 @@
                         Logger.LogWarning("Too many consecutive failures, stopping camera");
                         await StopCameraAsync();
                         _error = "Connection unstable. Please try again.";
+
                         break;
                     }
 
@@ -176,6 +178,7 @@
                     {
                         Logger.LogWarning("Failed to capture frame: No image data received");
                         _consecutiveFailures++;
+
                         continue;
                     }
 
@@ -193,7 +196,8 @@
                     // Track SignalR timeouts to detect persistent connection problems
                     _consecutiveFailures++;
                     Logger.LogWarning("Frame capture was canceled (attempt {Attempt} of {Max})",
-                                      _consecutiveFailures, MaxConsecutiveFailures);
+                                      _consecutiveFailures,
+                                      MaxConsecutiveFailures);
                 }
                 catch (Exception ex)
                 {
