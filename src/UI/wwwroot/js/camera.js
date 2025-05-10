@@ -23,7 +23,7 @@ window.CameraManager = {
 
         try {
             const video = {
-                facingMode: "environment"
+                facingMode: "environment",
             };
             const stream = await navigator.mediaDevices.getUserMedia({video});
 
@@ -70,27 +70,23 @@ window.CameraManager = {
         const videoElement = document.getElementById(videoElementId);
 
         if (!videoElement) {
-            console.error("Video element not found");
-            return null;
+            throw new Error("Video element not found");
         }
 
         // Check if video is ready
         if (!videoElement.videoWidth || !videoElement.videoHeight) {
-            console.error("Video dimensions not available yet");
-            return null;
+            throw new Error("Video dimensions not available yet");
         }
 
         if (videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) {
-            console.error("Video not ready for capture");
-            return null;
+            throw new Error("Video not ready for capture");
         }
 
         const captureCanvas = document.createElement("canvas");
         const canvasRenderingContext2D = captureCanvas.getContext("2d");
 
         if (!canvasRenderingContext2D) {
-            console.error("Failed to get 2D rendering context");
-            return null;
+            throw new Error("Failed to get 2D rendering context");
         }
 
         try {
@@ -103,18 +99,36 @@ window.CameraManager = {
             const type = "image/jpeg";
             const blob = await new Promise((resolve) => captureCanvas.toBlob(resolve, type, this.COMPRESSION.quality));
 
+            console.assert(blob != null, {message: "A blob object for the image contained in the canvas must be created"});
             if (!blob) {
                 throw new Error("Failed to create blob");
             }
 
             const arrayBuffer = await blob.arrayBuffer();
-            const image = new Uint8Array(arrayBuffer);
+            const imageInBytes = new Uint8Array(arrayBuffer);
+            const shouldCompress = this.COMPRESSION.useGzip && window.pako != null;
+            const finalImageInBytes = shouldCompress ? this.compressData(imageInBytes) : imageInBytes;
 
-            const compressedData = this.compressData(image);
+            console.dir({
+                description: "image details",
+                imageDimensions: {
+                    height: captureCanvas.height,
+                    width: captureCanvas.width,
+                },
+                imageQuality: this.COMPRESSION.quality,
+                ...(shouldCompress && {
+                    imageCompression: {
+                        isGzipEnabled: this.COMPRESSION.useGzip,
+                        originalSizeInKb: `${(imageInBytes.length / 1024).toFixed(2)}KB`,
+                        compressedSizeInKb: `${(finalImageInBytes.length / 1024).toFixed(2)}KB`,
+                        reductionAsPercentage: `${(100 - (finalImageInBytes.length / imageInBytes.length) * 100).toFixed(1)}% reduction`,
+                    }
+                })
+            });
 
             return {
-                data: compressedData,
-                isCompressed: compressedData !== image,
+                data: finalImageInBytes,
+                isCompressed: shouldCompress
             };
         } catch (error) {
             console.error("Error capturing frame:", error);
@@ -228,7 +242,8 @@ window.CameraManager = {
             scaledBox.x,
             scaledBox.y,
             scaledBox.width,
-            scaledBox.height);
+            scaledBox.height
+        );
     },
 
     /**
@@ -263,20 +278,8 @@ window.CameraManager = {
      * @returns {Uint8Array} Compressed data
      */
     compressData(data) {
-        if (!this.COMPRESSION.useGzip || !window.pako) {
-            return data;
-        }
-
         try {
-            const compressed = window.pako.gzip(data);
-            const compressionStats = {
-                originalSize: `${(data.length / 1024).toFixed(2)}KB`,
-                compressedSize: `${(compressed.length / 1024).toFixed(2)}KB`,
-                reductionPercent: `${(100 - (compressed.length / data.length) * 100).toFixed(1)}% reduction`,
-            };
-            console.dir("Compression Stats:" + " " + JSON.stringify(compressionStats));
-
-            return compressed;
+            return window.pako.gzip(data);
         } catch (error) {
             console.error("Compression failed:", error);
             return data;
