@@ -1,8 +1,13 @@
 using UI.Components;
 using UI.Infrastructure;
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using Serilog;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, configuration) => configuration
+                                                              .ReadFrom.Configuration(context.Configuration)
+                                                              .ReadFrom.Services(services));
 
 builder.Services.AddHttpClient();
 
