@@ -109,8 +109,7 @@ window.CameraManager = {
             const shouldCompress = this.COMPRESSION.useGzip && window.pako != null;
             const finalImageInBytes = shouldCompress ? this.compressData(imageInBytes) : imageInBytes;
 
-            console.dir({
-                description: "image details",
+            console.debug("image details: ", {
                 imageDimensions: {
                     height: captureCanvas.height,
                     width: captureCanvas.width,
@@ -189,8 +188,13 @@ window.CameraManager = {
             throw new Error(`Video element with ID '${videoElementId}' not found`);
         }
 
-        canvas.width = video.clientWidth;
-        canvas.height = video.clientHeight;
+        // canvas.width/height sets the canvas element's drawing surface
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // canvas.style.width/height controls the display size in the browser
+        canvas.style.width = "100%";
+        canvas.style.height = "auto";
 
         const canvasRenderingContext2D = canvas.getContext("2d");
         if (!canvasRenderingContext2D) {
@@ -201,10 +205,11 @@ window.CameraManager = {
             const x = 0, y = 0;
             canvasRenderingContext2D.clearRect(x, y, canvas.width, canvas.height);
 
-            const scale = {
-                x: canvas.width / video.videoWidth,
-                y: canvas.height / video.videoHeight,
-            };
+            console.debug(`Dimensions for #${canvasId} canvas and #${videoElementId} video:`, {
+                canvas: `${canvas.width}x${canvas.height}`,
+                videoSource: `${video.videoWidth}x${video.videoHeight}`,
+                videoDisplay: `${video.clientWidth}x${video.clientHeight}`
+            });
 
             canvasRenderingContext2D.lineWidth = STYLES.lineWidth;
             canvasRenderingContext2D.font = STYLES.font;
@@ -213,19 +218,35 @@ window.CameraManager = {
             detections.forEach((detection) => {
                 const {label, confidence, boundingBox} = detection;
 
-                const scaledBox = {
-                    x: boundingBox.x * scale.x,
-                    y: boundingBox.y * scale.y,
-                    width: boundingBox.width * scale.x,
-                    height: boundingBox.height * scale.y,
+                console.debug("Processing detection:", {
+                    label,
+                    confidence,
+                    "originalBox:": boundingBox
+                });
+
+                const displayBox = {
+                    x: Math.max(0, Math.min(canvas.width - 1, boundingBox.x)),
+                    y: Math.max(0, Math.min(canvas.height - 1, boundingBox.y)),
+                    width: Math.max(1, Math.min(canvas.width, boundingBox.width)),
+                    height: Math.max(1, Math.min(canvas.height, boundingBox.height))
                 };
 
-                this.drawBoundingBox(canvasRenderingContext2D, scaledBox, STYLES);
+                // Ensure box doesn't go outside canvas boundaries
+                if (displayBox.x + displayBox.width > canvas.width) {
+                    displayBox.width = canvas.width - displayBox.x;
+                }
+                if (displayBox.y + displayBox.height > canvas.height) {
+                    displayBox.height = canvas.height - displayBox.y;
+                }
+
+                console.debug("Final display box:", displayBox);
+
+                this.drawBoundingBox(canvasRenderingContext2D, displayBox, STYLES);
                 this.drawLabel(
                     canvasRenderingContext2D,
                     label,
                     confidence,
-                    scaledBox,
+                    displayBox,
                     STYLES);
             });
         } catch (error) {
