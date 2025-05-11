@@ -28,7 +28,7 @@ public sealed class ObjectDetector
     /// </summary>
     /// <param name="imageData">The image data to process</param>
     /// <returns>An array of detection results, each containing a label, confidence score, and bounding box.</returns>
-    public DetectionResult[] Detect(byte[] imageData)
+    public DetectionResult[] Detect(byte[] imageData, int imageHeight, int imageWidth, double imageQuality)
     {
         try
         {
@@ -38,7 +38,7 @@ public sealed class ObjectDetector
 
             (Tensor<float> boxes, Tensor<float> scores) = _model.RunInference(inputTensor, shapeTensor);
 
-            return _model.ProcessOutputs(boxes, scores, image.Width, image.Height);
+            return _model.ProcessOutputs(boxes, scores, imageWidth, imageHeight);
         }
         catch (Exception ex)
         {

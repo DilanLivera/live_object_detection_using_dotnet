@@ -128,7 +128,10 @@ window.CameraManager = {
 
             return {
                 data: finalImageInBytes,
-                isCompressed: shouldCompress
+                isCompressed: shouldCompress,
+                imageHeight: captureCanvas.height,
+                imageWidth: captureCanvas.width,
+                imageQuality: this.COMPRESSION.quality
             };
         } catch (error) {
             console.error("Error capturing frame:", error);

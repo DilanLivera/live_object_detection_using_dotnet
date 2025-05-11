@@ -187,7 +187,10 @@
 
                     byte[] processedImageData = image.IsCompressed ? DecompressGzip(image.Data) : image.Data;
 
-                    DetectionResult[] detections = ObjectDetector.Detect(processedImageData);
+                    DetectionResult[] detections = ObjectDetector.Detect(processedImageData,
+                                                                         image.ImageHeight,
+                                                                         image.ImageWidth,
+                                                                         image.ImageQuality);
 
                     await JsRuntime.InvokeVoidAsync(identifier: "CameraManager.drawDetections", "detectionOverlay", "cameraFeed", detections);
                 }
@@ -251,6 +254,11 @@
     private class CapturedImage {
         public byte[] Data { get; init; } = [];
         public bool IsCompressed { get; init; }
+        public int ImageHeight { get; init; }
+        public int ImageWidth { get; init; }
+
+        // A Number between 0 and 1 indicating the image quality used when creating images using file formats that support lossy compression(such as image/jpeg or image/webp).
+        public double ImageQuality { get; init; }
     }
 
 }
