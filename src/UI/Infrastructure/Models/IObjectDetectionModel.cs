@@ -97,9 +97,18 @@ public struct BoundingBox
     /// <returns>A new Box instance with scaled coordinates</returns>
     public BoundingBox(float x1, float y1, float x2, float y2, float scaleX, float scaleY)
     {
+        // Ensure coordinates are non-negative
+        x1 = Math.Max(0, x1);
+        y1 = Math.Max(0, y1);
+
+        // Ensure width and height are positive and at least 1 pixel
+        float width = Math.Max(1, x2 - x1);
+        float height = Math.Max(1, y2 - y1);
+
+        // Apply scaling factors
         X = x1 * scaleX;
         Y = y1 * scaleY;
-        Width = (x2 - x1) * scaleX;
-        Height = (y2 - y1) * scaleY;
+        Width = width * scaleX;
+        Height = height * scaleY;
     }
 }

@@ -14,8 +14,8 @@ namespace UI.Infrastructure.Models.TinyYoloV3;
 public sealed class TinyYoloV3Model : IObjectDetectionModel
 {
     private const int BatchSize = 0;
-    private const int NumberOfCandidateBoxesIndex = 1;
-    private const int NumberOfClassesIndex = 1;
+    private const int CandidateBoxesDimension = 1;
+    private const int ClassesDimension = 1;
     private readonly ILogger<TinyYoloV3Model> _logger;
     private readonly InferenceSession _session;
     private readonly string[] _labels;
@@ -127,8 +127,10 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                ]
              */
 
-            Tensor<float> boxes = outputs.First(o => o.Name == "yolonms_layer_1").AsTensor<float>();
-            Tensor<float> scores = outputs.First(o => o.Name == "yolonms_layer_1:1").AsTensor<float>();
+            Tensor<float> boxes = outputs.First(o => o.Name == "yolonms_layer_1")
+                                         .AsTensor<float>();
+            Tensor<float> scores = outputs.First(o => o.Name == "yolonms_layer_1:1")
+                                          .AsTensor<float>();
 
             return (boxes, scores);
         }
@@ -147,31 +149,28 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
 
         try
         {
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                _logger.LogDebug("Boxes shape: {BoxesShape}", string.Join(",", boxes.Dimensions.ToArray()));
-                _logger.LogDebug("Scores shape: {ScoresShape}", string.Join(",", scores.Dimensions.ToArray()));
-            }
+            _logger.LogDebug("Start processing model output. Boxes Shape: {BoxesShape}, Scores Shape: {ScoresShape}",
+                             string.Join(",", boxes.Dimensions.ToArray()),
+                             string.Join(",", scores.Dimensions.ToArray()));
 
-            // Process each detection from the model output.
-
-            for (int candidateBoxIndex = 0; candidateBoxIndex < boxes.Dimensions[NumberOfCandidateBoxesIndex]; candidateBoxIndex++)
+            // Process each detection from the model output
+            for (int candidateBoxIndex = 0; candidateBoxIndex < boxes.Dimensions[CandidateBoxesDimension]; candidateBoxIndex++)
             {
-                (int ClassIndex, float Score)? bestClassAndAndHighestConfidenceScore = FindBestClassIndexAndHighestConfidenceScore(scores, batchIndex: BatchSize, candidateBoxIndex);
+                (int ClassIndex, float Score)? @class = FindClassWithHighestConfidenceScore(scores, batchIndex: BatchSize, candidateBoxIndex);
 
                 // Skip if no valid class or score below threshold
-                if (bestClassAndAndHighestConfidenceScore == null || bestClassAndAndHighestConfidenceScore.Value.Score < _modelConfig.ConfidenceThreshold)
+                if (@class == null || @class.Value.Score < _modelConfig.ConfidenceThreshold)
                 {
                     continue;
                 }
 
-                int bestClass = bestClassAndAndHighestConfidenceScore.Value.ClassIndex;
-                float maxScore = bestClassAndAndHighestConfidenceScore.Value.Score;
+                int bestClassIndex = @class.Value.ClassIndex;
+                float maxScore = @class.Value.Score;
 
-                _logger.LogDebug("Found detection {DetectionIndex}: Class={ClassIndex} ({ClassName}) Score={Score:F3}",
+                _logger.LogDebug("Found Detection {DetectionIndex}. Class: {ClassName} ({ClassIndex}) Score: {Score:F3}",
                                  candidateBoxIndex,
-                                 bestClass,
-                                 _labels[bestClass],
+                                 _labels[bestClassIndex],
+                                 bestClassIndex,
                                  maxScore);
 
                 // Extract bounding box coordinates
@@ -180,18 +179,30 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
                 float y2 = boxes[BatchSize, candidateBoxIndex, 2]; // 2 = bottom coordinate = y2
                 float x2 = boxes[BatchSize, candidateBoxIndex, 3]; // 3 = right coordinate = x2
 
-                // Target dimensions for the processed image
-                const float processedWidth = 800f;
-                const float processedHeight = 450f;
+                _logger.LogDebug("Raw Box Coordinates. Top-Left: {X1:F1},{Y1:F1}, Bottom-Right: {X2:F1},{Y2:F1}",
+                                 x1,
+                                 y1,
+                                 x2,
+                                 y2);
 
-                // Calculate scale factors to convert from original to processed dimensions
-                float scaleX = processedWidth / imageWidth;
-                float scaleY = processedHeight / imageHeight;
+                // Calculate scale factors for normalized coordinates (convert from model input size to display size)
+                // ONNX models typically output coordinates relative to their input size (416x416)
+                float scaleX = (float)imageWidth / _modelConfig.ImageSize;
+                float scaleY = (float)imageHeight / _modelConfig.ImageSize;
 
                 BoundingBox boundingBox = new(x1, y1, x2, y2, scaleX, scaleY);
-                DetectionResult detection = new(_labels[bestClass], maxScore, boundingBox);
 
-                _logger.LogDebug("Detection: {Label} ({Confidence:P1}) at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
+                _logger.LogDebug("Bounding Box: X={X:F1}, Y={Y:F1}, Width: {Width:F1}, Height: {Height:F1}, Scale: X={ScaleX:F3}, Y={ScaleY:F3}",
+                                 boundingBox.X,
+                                 boundingBox.Y,
+                                 boundingBox.Width,
+                                 boundingBox.Height,
+                                 scaleX,
+                                 scaleY);
+
+                DetectionResult detection = new(_labels[bestClassIndex], maxScore, boundingBox);
+
+                _logger.LogDebug("Detection: Label: {Label} Confidence: {Confidence:P1} at [X={X:F1}, Y={Y:F1}, W={Width:F1}, H={Height:F1}]",
                                  detection.Label,
                                  detection.Confidence,
                                  detection.BoundingBox.X,
@@ -211,8 +222,6 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
 
             throw;
         }
-
-        _logger.LogDebug("Total detections found: {DetectionsCount}", detections.Count);
 
         return detections.ToArray();
     }
@@ -269,19 +278,20 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
     private DetectionResult[] ApplyNonMaximumSuppression(DetectionResult[] detections)
     {
         List<DetectionResult> results = [];
-        IEnumerable<IGrouping<string, DetectionResult>> detectionsGroups = detections.GroupBy(r => r.Label);
+        IEnumerable<IGrouping<string, DetectionResult>> detectionsGroupedByLabel = detections.GroupBy(r => r.Label);
 
-        foreach (IGrouping<string, DetectionResult> group in detectionsGroups)
+        foreach (IGrouping<string, DetectionResult> detectionsForLabel in detectionsGroupedByLabel)
         {
-            List<DetectionResult> sorted = group.OrderByDescending(r => r.Confidence).ToList();
+            List<DetectionResult> detectionsByLabelConfidence = detectionsForLabel.OrderByDescending(r => r.Confidence)
+                                                                                  .ToList();
 
-            while (sorted.Count > 0)
+            while (detectionsByLabelConfidence.Count > 0)
             {
-                DetectionResult current = sorted[0];
+                DetectionResult current = detectionsByLabelConfidence[0];
                 results.Add(current);
-                sorted.RemoveAt(index: 0);
+                detectionsByLabelConfidence.RemoveAt(index: 0);
 
-                sorted.RemoveAll(r => CalculateIntersectionOverUnion(current.BoundingBox, r.BoundingBox) > _modelConfig.IntersectionOverUnionThreshold);
+                detectionsByLabelConfidence.RemoveAll(r => CalculateIntersectionOverUnion(current.BoundingBox, r.BoundingBox) > _modelConfig.IntersectionOverUnionThreshold);
             }
         }
 
@@ -314,12 +324,29 @@ public sealed class TinyYoloV3Model : IObjectDetectionModel
     /// <param name="batchIndex">The batch index (usually 0)</param>
     /// <param name="candidateBoxIndex">The index of the candidate box</param>
     /// <returns>The class index and score with the highest confidence, or null if none found</returns>
-    private static (int ClassIndex, float Score)? FindBestClassIndexAndHighestConfidenceScore(
+    private (int ClassIndex, float Score)? FindClassWithHighestConfidenceScore(
         Tensor<float> scores,
         int batchIndex,
-        int candidateBoxIndex) => Enumerable.Range(0, scores.Dimensions[NumberOfClassesIndex])
-                                            .Select(classIndex => (ClassIndex: classIndex, Score: scores[batchIndex, classIndex, candidateBoxIndex]))
-                                            .MaxBy(item => item.Score);
+        int candidateBoxIndex)
+    {
+        IEnumerable<(int ClassIndex, float Score)> classes = Enumerable.Range(0, scores.Dimensions[ClassesDimension])
+                                                                       .Select(i => (ClassIndex: i, Score: scores[batchIndex, i, candidateBoxIndex]))
+                                                                       .ToArray();
+
+        if (classes.Any() && _logger.IsEnabled(LogLevel.Debug))
+        {
+            foreach ((int classIndex, float score) in classes.Where(c => c.Score >= 0.01))
+            {
+                _logger.LogDebug("Class Scores. Candidate Box: {CandidateBoxIndex}, Class: {ClassIndex}, Score: {Score:F4} ({ScoreAsPercentage:F1}%)",
+                                 candidateBoxIndex,
+                                 classIndex,
+                                 score,
+                                 score * 100);
+            }
+        }
+
+        return classes.MaxBy(c => c.Score);
+    }
 
     public void Dispose() => _session.Dispose();
 }
