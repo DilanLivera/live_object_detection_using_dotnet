@@ -1,2 +1,139 @@
 @page "/upload"
 @rendermode InteractiveServer
+@inject ILogger<Upload> Logger
+@using System.IO
+
+<div class="container mx-auto py-10 px-4">
+    <div class="max-w-3xl mx-auto">
+        <div class="space-y-4">
+            <h1 class="text-3xl font-bold tracking-tight">Upload Video</h1>
+            <p class="text-gray-400">
+                Upload a video file to detect objects. Supported formats: MP4
+            </p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="mt-6 p-4 bg-red-900/50 border border-red-500/50 rounded-lg">
+                <p class="text-red-200">@_errorMessage</p>
+            </div>
+        }
+
+        @if (_isUploadingComplete)
+        {
+            <div class="mt-6 p-4 bg-green-900/50 border border-green-500/50 rounded-lg">
+                <p class="text-200">
+                    Video successfully uploaded.
+                </p>
+            </div>
+        }
+
+        <div class="mt-8">
+            <div class="border border-gray-700 rounded-lg p-10">
+                <div class="border-2 border-dashed border-gray-500 rounded-lg p-12">
+                    <div class="flex flex-col items-center justify-center space-y-6">
+                        <h3 class="text-xl font-medium text-center">
+                            Select a video to upload
+                        </h3>
+
+                        <div class="flex items-center justify-center w-full">
+                            <label for="videoUpload"
+                                   class="inline-flex items-center px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors cursor-pointer">
+                                <svg class="w-4 h-4 mr-2"
+                                     aria-hidden="true"
+                                     xmlns="http://www.w3.org/2000/svg"
+                                     fill="none"
+                                     viewBox="0 0 24 24"
+                                     stroke="currentColor">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="2"
+                                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/>
+                                </svg>
+                                Select Video
+                                <InputFile id="videoUpload"
+                                           class="hidden"
+                                           accept=".mp4"
+                                           OnChange="@UploadFileAsync"/>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isUploadingComplete;
+    private string? _fileName;
+    private string? _errorMessage;
+
+    private const long MaxFileSizeInBytes = 500 * 1024 * 1024; //500 MB
+    private const int MaxAllowedFiles = 1;
+
+    private async Task UploadFileAsync(InputFileChangeEventArgs eventArgs)
+    {
+        _errorMessage = null;
+        _isUploadingComplete = false;
+
+        switch (eventArgs.FileCount)
+        {
+            case 0:
+                return;
+            case > MaxAllowedFiles:
+                _errorMessage = "Please select only one video file.";
+
+                return;
+        }
+
+        IBrowserFile file = eventArgs.File;
+        _fileName = file.Name;
+
+        if (!IsVideoFile(_fileName))
+        {
+            _errorMessage = "Please upload a valid video file (MP4).";
+
+            return;
+        }
+
+        if (file.Size > MaxFileSizeInBytes)
+        {
+            _errorMessage = $"File size exceeds the {MaxFileSizeInBytes / (1024 * 1024)}MB limit.";
+
+            return;
+        }
+
+        string uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+
+        if (!Directory.Exists(uploadsPath))
+        {
+            Directory.CreateDirectory(uploadsPath);
+        }
+
+        string tempFileName = Path.GetRandomFileName() + Path.GetExtension(_fileName);
+
+        try
+        {
+            string filePath = Path.Combine(uploadsPath, tempFileName);
+
+            await using FileStream fs = new(filePath, FileMode.Create);
+            await file.OpenReadStream(MaxFileSizeInBytes).CopyToAsync(fs);
+
+            _isUploadingComplete = true;
+
+            Logger.LogInformation("Video file saved to {FilePath}", filePath);
+
+            await SimulateVideoProcessingAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error saving file: {ex.Message}";
+            Logger.LogError(ex, "Error saving video file");
+        }
+    }
+
+    private async Task SimulateVideoProcessingAsync() => await Task.Delay(1000);
+
+    private bool IsVideoFile(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() is ".mp4"; //or ".webm" or ".mov"
+}
