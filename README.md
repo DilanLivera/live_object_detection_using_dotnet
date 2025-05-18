@@ -1,4 +1,4 @@
-# Live object detection using .NET
+# Object detection using .NET
 
 A web application to detect objects live using .NET.
 
