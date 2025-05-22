@@ -2,6 +2,7 @@ using UI.Components;
 using UI.Infrastructure;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Serilog;
+using UI.Infrastructure.UploadedVideoProcessing;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,8 @@ builder.Services
 builder.Services.AddScoped<CircuitHandler, CircuitHandlerService>();
 
 builder.Services.AddObjectDetection(builder.Configuration);
+
+builder.Services.AddUploadedVideoProcessing();
 
 builder.Services.AddApplicationAuth(builder.Configuration);
 
