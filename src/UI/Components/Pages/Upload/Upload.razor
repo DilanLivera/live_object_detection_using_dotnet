@@ -1,0 +1,196 @@
+@page "/upload"
+@rendermode InteractiveServer
+@inject ILogger<Upload> Logger
+@inject UploadedVideoProcessor UploadedVideoProcessor
+@using System.Diagnostics
+@using System.IO
+@using UI.Infrastructure.UploadedVideoProcessing
+
+<div class="container mx-auto py-10 px-4">
+    <div class="max-w-3xl mx-auto">
+        <div class="space-y-4">
+            <h1 class="text-3xl font-bold tracking-tight">Upload Video</h1>
+            <p class="text-gray-400">
+                Upload a video file to detect objects. Supported formats: MP4
+            </p>
+        </div>
+
+        <div class="mt-6">
+            <div class="flex items-center">
+                <label for="videoUpload"
+                       class="inline-flex items-center px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors cursor-pointer">
+                    <svg class="w-4 h-4 mr-2"
+                         aria-hidden="true"
+                         xmlns="http://www.w3.org/2000/svg"
+                         fill="none"
+                         viewBox="0 0 24 24"
+                         stroke="currentColor">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/>
+                    </svg>
+                    Select Video
+                    <InputFile id="videoUpload"
+                               class="hidden"
+                               accept=".mp4"
+                               OnChange="@UploadFileAsync"
+                               disabled="@(_objectDetectionState.Status == ObjectDetectionStatus.Uploading || _objectDetectionState.Status == ObjectDetectionStatus.Processing)"/>
+                </label>
+                @if (_videoFile != null && _objectDetectionState.Status != ObjectDetectionStatus.Failed)
+                {
+                    <span class="ml-3 text-gray-400">@_videoFile.Name (@Math.Round((double)_videoFile.Size / (1024 * 1024), 1) MB) @(_objectDetectionState.VideoDuration != null ? $@"- {_objectDetectionState.VideoDuration.Value:hh\:mm\:ss}" : "")</span>
+                }
+            </div>
+        </div>
+
+        <div class="mt-6 space-y-4">
+            @if (_objectDetectionState.StatusMessages.Count > 0)
+            {
+                foreach (StatusMessage message in _objectDetectionState.StatusMessages.Value)
+                {
+                    <div class="p-4 @message.CssClass rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                @if (message.ShouldShowSpinner)
+                                {
+                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                }
+                                <span class="@message.TextClass">@message.Text</span>
+                            </div>
+                            <span class="text-xs text-gray-500">@message.CreatedAt.ToString(format: "HH:mm:ss")</span>
+                        </div>
+                        @if (message.ShouldShowProgress && message.Progress > 0)
+                        {
+                            <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                                <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: @(message.Progress * 100)%"></div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(message.Details))
+                        {
+                            <div class="mt-2 text-sm @message.TextClass opacity-80">
+                                @message.Details
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+        @if (_objectDetectionState.Status == ObjectDetectionStatus.Processed)
+        {
+            <div class="mt-6 p-4">
+                <div class="space-y-4">
+                    <p class="font-medium">
+                        Video processing complete: Found @_objectDetectionState.DetectedObjects.Sum(o => o.Count) objects across @_objectDetectionState.TotalFrames frames.
+                    </p>
+
+                    @if (_objectDetectionState.DetectedObjects.Length > 0)
+                    {
+                        <div class="space-y-2">
+                            <h3 class="font-medium">Detected Objects:</h3>
+                            <div class="grid grid-cols-2 gap-2">
+                                @foreach (ObjectSummary summary in _objectDetectionState.DetectedObjects.OrderByDescending(s => s.Count))
+                                {
+                                    <div class="p-2 rounded">
+                                        <div class="flex justify-between">
+                                            <span>@summary.Label</span>
+                                            <span>@summary.Count (@Math.Round(summary.AverageConfidence * 100)%)</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (_objectDetectionState.VideoFrameRate > 0)
+                    {
+                        <p class="text-sm">
+                            Video frame rate: @Math.Round(_objectDetectionState.VideoFrameRate, digits: 2) fps
+                        </p>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private UploadedVideoFile? _videoFile;
+    private readonly ObjectDetectionState _objectDetectionState = new();
+
+    private const long MaxFileSizeInBytes = 500 * 1024 * 1024; // 500 MB
+    private const int MaxAllowedFiles = 1;
+
+    private async Task UploadFileAsync(InputFileChangeEventArgs eventArgs)
+    {
+        _objectDetectionState.Reset();
+        _objectDetectionState.SetUploading();
+
+        switch (eventArgs.FileCount)
+        {
+            case 0:
+                return;
+            case > MaxAllowedFiles:
+                _objectDetectionState.SetFailed("Please select only one video file.");
+
+                return;
+        }
+
+        IBrowserFile file = eventArgs.File;
+
+        await UploadVideoAsync(file);
+
+        await ProcessVideoAsync();
+    }
+
+    private async Task UploadVideoAsync(IBrowserFile file)
+    {
+        try
+        {
+            _videoFile = new UploadedVideoFile(file.Name, file.Size);
+
+            await using FileStream fs = new(_videoFile.FilePath, FileMode.Create);
+            await file.OpenReadStream(MaxFileSizeInBytes).CopyToAsync(fs);
+
+            _objectDetectionState.SetUploaded(_videoFile.Name);
+
+            Logger.LogInformation("Video file saved to {FilePath}", _videoFile.FilePath);
+        }
+        catch (Exception ex)
+        {
+            _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {ex.Message}");
+
+            Logger.LogError(ex, "Error saving video file");
+        }
+    }
+
+    private async Task ProcessVideoAsync()
+    {
+        try
+        {
+            Progress<VideoProcessingProgress> progressHandler = new(HandleProcessingProgress);
+
+            VideoProcessingResult result = await UploadedVideoProcessor.ProcessVideoAsync(_videoFile!,
+                                                                                          progressCallback: progressHandler);
+
+            Debug.Assert(_videoFile is not null, "_videoFile is null");
+            _videoFile.MarkAsProcessed();
+
+            _objectDetectionState.SetProcessed(result);
+        }
+        catch (Exception ex)
+        {
+            _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {ex.Message}");
+
+            Logger.LogError(ex, "Error processing video");
+        }
+    }
+
+    private void HandleProcessingProgress(VideoProcessingProgress progress)
+    {
+        _objectDetectionState.UpdateProcessingProgress(progress);
+        StateHasChanged();
+    }
+
+}
