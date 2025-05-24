@@ -33,6 +33,11 @@ public sealed class ObjectDetectionState
     public ObjectSummary[] DetectedObjects { get; private set; } = [];
 
     /// <summary>
+    /// Individual detection results for each frame
+    /// </summary>
+    public FrameDetectionResult[] FrameResults { get; private set; } = [];
+
+    /// <summary>
     /// Total number of frames that were processed
     /// </summary>
     public int TotalFrames { get; private set; }
@@ -57,6 +62,7 @@ public sealed class ObjectDetectionState
         ErrorMessage = null;
         StatusMessages.Clear();
         DetectedObjects = [];
+        FrameResults = [];
         TotalFrames = 0;
         VideoDuration = null;
         VideoFrameRate = 0;
@@ -144,6 +150,7 @@ public sealed class ObjectDetectionState
 
         Status = ObjectDetectionStatus.Processed;
         DetectedObjects = result.DetectedObjects;
+        FrameResults = result.FrameResults;
         TotalFrames = result.TotalFrames;
         VideoDuration = result.ProcessedDuration;
 
