@@ -1,13 +1,13 @@
 using Microsoft.Extensions.Options;
-using UI.Infrastructure.Models;
-using UI.Infrastructure.Models.TinyYoloV3;
+using UI.Infrastructure.ObjectDetection.Models;
+using UI.Infrastructure.ObjectDetection.Models.TinyYoloV3;
 
-namespace UI.Infrastructure;
+namespace UI.Infrastructure.ObjectDetection;
 
 /// <summary>
 /// Adds object detection services to the service collection.
 /// </summary>
-public static class ObjectDetectionServiceRegistration
+public static class ObjectDetectionServicesRegistration
 {
     /// <summary>
     /// Adds object detection services to the service collection.

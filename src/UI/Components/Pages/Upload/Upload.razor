@@ -2,9 +2,9 @@
 @rendermode InteractiveServer
 @inject ILogger<Upload> Logger
 @inject UploadedVideoProcessor UploadedVideoProcessor
+@inject FileStorageService FileStorageService
 @using System.Diagnostics
-@using System.IO
-@using UI.Infrastructure.UploadedVideoProcessing
+@using UI.Infrastructure.FileStorage
 
 <div class="container mx-auto py-10 px-4">
     <div class="max-w-3xl mx-auto">
@@ -148,10 +148,18 @@
     {
         try
         {
-            _videoFile = new UploadedVideoFile(file.Name, file.Size);
+            Result<string> uploadResult = await FileStorageService.SaveFileAsync(file, MaxFileSizeInBytes);
 
-            await using FileStream fs = new(_videoFile.FilePath, FileMode.Create);
-            await file.OpenReadStream(MaxFileSizeInBytes).CopyToAsync(fs);
+            if (!uploadResult.IsSuccess)
+            {
+                Logger.LogWarning("File upload failed: {ErrorMessage}", uploadResult.ErrorMessage);
+
+                _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {uploadResult.ErrorMessage}");
+
+                return;
+            }
+
+            _videoFile = new UploadedVideoFile(file.Name, file.Size, uploadResult.Value!);
 
             _objectDetectionState.SetUploaded(_videoFile.Name);
 
@@ -159,9 +167,9 @@
         }
         catch (Exception ex)
         {
-            _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {ex.Message}");
+            Logger.LogError(ex, "Unexpected error saving video file");
 
-            Logger.LogError(ex, "Error saving video file");
+            _objectDetectionState.SetFailed(errorMessage: $"Unexpected error saving file: {ex.Message}");
         }
     }
 
@@ -171,13 +179,22 @@
         {
             Progress<VideoProcessingProgress> progressHandler = new(HandleProcessingProgress);
 
-            VideoProcessingResult result = await UploadedVideoProcessor.ProcessVideoAsync(_videoFile!,
-                                                                                          progressCallback: progressHandler);
+            Result<VideoProcessingResult> processingResult = await UploadedVideoProcessor.ProcessVideoAsync(_videoFile!,
+                                                                                                            progressCallback: progressHandler);
+
+            if (!processingResult.IsSuccess)
+            {
+                Logger.LogWarning("Video processing failed: {ErrorMessage}", processingResult.ErrorMessage);
+
+                _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {processingResult.ErrorMessage}");
+
+                return;
+            }
 
             Debug.Assert(_videoFile is not null, "_videoFile is null");
             _videoFile.MarkAsProcessed();
 
-            _objectDetectionState.SetProcessed(result);
+            _objectDetectionState.SetProcessed(processingResult.Value!);
         }
         catch (Exception ex)
         {
