@@ -35,7 +35,7 @@
                                class="hidden"
                                accept=".mp4"
                                OnChange="@UploadFileAsync"
-                               disabled="@(_objectDetectionState.Status == ObjectDetectionStatus.Uploading || _objectDetectionState.Status == ObjectDetectionStatus.Processing)"/>
+                               disabled="@ShouldDisableInput()"/>
                 </label>
                 @if (_videoFile != null && _objectDetectionState.Status != ObjectDetectionStatus.Failed)
                 {
@@ -54,7 +54,7 @@
                             <div class="flex items-center space-x-3">
                                 @if (message.ShouldShowSpinner)
                                 {
-                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-grey-500"></div>
                                 }
                                 <span class="@message.TextClass">@message.Text</span>
                             </div>
@@ -63,7 +63,7 @@
                         @if (message.ShouldShowProgress && message.Progress > 0)
                         {
                             <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
-                                <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: @(message.Progress * 100)%"></div>
+                                <div class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: @(message.Progress * 100)%"></div>
                             </div>
                         }
                         @if (!string.IsNullOrEmpty(message.Details))
@@ -82,23 +82,85 @@
             <div class="mt-6 p-4">
                 <div class="space-y-4">
                     <p class="font-medium">
-                        Video processing complete: Found @_objectDetectionState.DetectedObjects.Sum(o => o.Count) objects across @_objectDetectionState.TotalFrames frames.
+                        Video processing complete: Found @_objectDetectionState.FrameResults.Sum(f => f.Detections.Length) total detections across @_objectDetectionState.TotalFrames frames.
                     </p>
 
-                    @if (_objectDetectionState.DetectedObjects.Length > 0)
+                    @{
+                        var allDetections = _objectDetectionState.FrameResults
+                                                                 .SelectMany(frame => frame.Detections.Select(detection => new
+                                                                                                                           {
+                                                                                                                               FrameNumber = frame.FrameNumber,
+                                                                                                                               Timestamp = frame.Timestamp,
+                                                                                                                               Detection = detection
+                                                                                                                           }))
+                                                                 .ToList();
+
+                        var detectionSummary = allDetections
+                                               .GroupBy(x => x.Detection.Label)
+                                               .Select(g => new { Label = g.Key, Count = g.Count(), AvgConfidence = g.Average(x => x.Detection.Confidence) })
+                                               .OrderByDescending(x => x.Count)
+                                               .ToList();
+
+                    }
+
+                    @if (allDetections.Any())
                     {
-                        <div class="space-y-2">
-                            <h3 class="font-medium">Detected Objects:</h3>
-                            <div class="grid grid-cols-2 gap-2">
-                                @foreach (ObjectSummary summary in _objectDetectionState.DetectedObjects.OrderByDescending(s => s.Count))
-                                {
-                                    <div class="p-2 rounded">
-                                        <div class="flex justify-between">
-                                            <span>@summary.Label</span>
-                                            <span>@summary.Count (@Math.Round(summary.AverageConfidence * 100)%)</span>
+                        <div class="space-y-4">
+                            <div class="space-y-2">
+                                <h3 class="font-medium">Detection Summary:</h3>
+                                <div class="grid grid-cols-2 gap-2">
+                                    @foreach (var summary in detectionSummary)
+                                    {
+                                        <div class="p-2 bg-gray-800/20 border border-gray-600/20 rounded">
+                                            <div class="flex justify-between">
+                                                <span class="text-blue-300">@summary.Label</span>
+                                                <span class="text-sm text-gray-400">@summary.Count × (@Math.Round(summary.AvgConfidence * 100, 1)%)</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                }
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                <h3 class="font-medium">Detections per frame:</h3>
+                                <div class="max-h-96 overflow-y-auto space-y-2">
+                                    @{
+                                        var frameGroups = allDetections
+                                                          .GroupBy(x => x.FrameNumber)
+                                                          .OrderBy(g => g.Key)
+                                                          .ToList();
+                                    }
+
+                                    @foreach (var frameGroup in frameGroups)
+                                    {
+                                        <div class="p-3 bg-gray-800/30 border border-gray-600/30 rounded-lg">
+                                            <div class="mb-2 pb-2 border-b border-gray-600/30">
+                                                <span class="font-medium text-gray-300">
+                                                    Frame @frameGroup.Key (@frameGroup.First().Timestamp.ToString(@"mm\:ss\.ff"))
+                                                </span>
+                                                <span class="ml-2 text-sm text-gray-400">
+                                                    @frameGroup.Count() detection@(frameGroup.Count() == 1 ? "" : "s")
+                                                </span>
+                                            </div>
+                                            <div class="space-y-1">
+                                                @foreach (var detection in frameGroup.OrderByDescending(d => d.Detection.Confidence))
+                                                {
+                                                    <div class="flex items-center justify-between">
+                                                        <div class="flex items-center space-x-2">
+                                                            <span class="font-medium text-blue-300">@detection.Detection.Label</span>
+                                                            <span class="text-xs text-gray-500">
+                                                                x: @Math.Round(detection.Detection.BoundingBox.X, 0), y: @Math.Round(detection.Detection.BoundingBox.Y, 0), w: @Math.Round(detection.Detection.BoundingBox.Width, 0), h: @Math.Round(detection.Detection.BoundingBox.Height, 0)
+                                                            </span>
+                                                        </div>
+                                                        <span class="text-sm font-medium text-green-300">
+                                                            @Math.Round(detection.Detection.Confidence * 100, 1)%
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
                             </div>
                         </div>
                     }
@@ -125,6 +187,7 @@
     private async Task UploadFileAsync(InputFileChangeEventArgs eventArgs)
     {
         _objectDetectionState.Reset();
+        _videoFile = null;
         _objectDetectionState.SetUploading();
 
         switch (eventArgs.FileCount)
@@ -209,5 +272,9 @@
         _objectDetectionState.UpdateProcessingProgress(progress);
         StateHasChanged();
     }
+
+    private bool ShouldDisableInput() => _objectDetectionState.Status is not (ObjectDetectionStatus.None or
+        ObjectDetectionStatus.Processed or
+        ObjectDetectionStatus.Failed);
 
 }
