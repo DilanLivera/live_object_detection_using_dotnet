@@ -2,7 +2,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace UI.Infrastructure.Models;
+namespace UI.Infrastructure.ObjectDetection.Models;
 
 /// <summary>
 /// Defines the contract for object detection models.

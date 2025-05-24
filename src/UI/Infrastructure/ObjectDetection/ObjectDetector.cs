@@ -1,9 +1,9 @@
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using UI.Infrastructure.Models;
+using UI.Infrastructure.ObjectDetection.Models;
 
-namespace UI.Infrastructure;
+namespace UI.Infrastructure.ObjectDetection;
 
 /// <summary>
 /// Provides object detection functionality using configurable models.
