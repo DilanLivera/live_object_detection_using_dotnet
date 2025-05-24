@@ -1,4 +1,4 @@
-namespace UI.Infrastructure.UploadedVideoProcessing;
+namespace UI.Components.Pages.Upload;
 
 /// <summary>
 /// Represents detailed progress information for video processing operations

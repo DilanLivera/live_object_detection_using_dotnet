@@ -1,9 +1,11 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using UI.Infrastructure.Models;
+using UI.Infrastructure.ObjectDetection;
+using UI.Infrastructure.ObjectDetection.Models;
+using UI.Infrastructure.VideoProcessing;
 using Xabe.FFmpeg;
 
-namespace UI.Infrastructure.UploadedVideoProcessing;
+namespace UI.Components.Pages.Upload;
 
 public class UploadedVideoProcessor
 {
@@ -24,9 +26,12 @@ public class UploadedVideoProcessor
         _objectDetector = objectDetector;
         _frameExtractor = frameExtractor;
 
-        _frameIntervalInSeconds = configuration.GetValue("UploadedVideoProcessor:FrameExtractionInterval", defaultValue: 1.0);
-        _imageQuality = configuration.GetValue("UploadedVideoProcessor:ImageQuality", defaultValue: 1.0);
-        _shouldCleanupFrames = configuration.GetValue("UploadedVideoProcessor:ShouldCleanupFrames", defaultValue: true);
+        _frameIntervalInSeconds = configuration.GetValue("UploadedVideoProcessor:FrameExtractionInterval",
+                                                         defaultValue: 1.0);
+        _imageQuality = configuration.GetValue("UploadedVideoProcessor:ImageQuality",
+                                               defaultValue: 1.0);
+        _shouldCleanupFrames = configuration.GetValue("UploadedVideoProcessor:ShouldCleanupFrames",
+                                                      defaultValue: true);
     }
 
     /// <summary>
@@ -34,8 +39,8 @@ public class UploadedVideoProcessor
     /// </summary>
     /// <param name="uploadedVideoFile">Video file to process</param>
     /// <param name="progressCallback">Optional callback to report video processing progress</param>
-    /// <returns>Video processing results with detection data</returns>
-    public async Task<VideoProcessingResult> ProcessVideoAsync(
+    /// <returns>A Result containing video processing results with detection data or an error message</returns>
+    public async Task<Result<VideoProcessingResult>> ProcessVideoAsync(
         UploadedVideoFile uploadedVideoFile,
         IProgress<VideoProcessingProgress> progressCallback)
     {
@@ -43,9 +48,22 @@ public class UploadedVideoProcessor
 
         try
         {
-            (List<FrameInfo> frameInfo, TimeSpan videoDuration) = await ExtractAllFramesAsync(uploadedVideoFile, progressCallback);
+            Result<(List<FrameInfo> frameInfo, TimeSpan videoDuration)> frameExtractionResult = await ExtractAllFramesAsync(uploadedVideoFile,
+                                                                                                                            progressCallback);
+            if (frameExtractionResult.IsFailure)
+            {
+                return Result<VideoProcessingResult>.Failure(frameExtractionResult.ErrorMessage!);
+            }
 
-            List<FrameDetectionResult> frameResults = await DetectObjectsInFramesAsync(frameInfo, progressCallback);
+            (List<FrameInfo>? frameInfo, TimeSpan videoDuration) = frameExtractionResult.Value;
+
+            Result<List<FrameDetectionResult>> detectionResult = await DetectObjectsInFramesAsync(frameInfo, progressCallback);
+            if (detectionResult.IsFailure)
+            {
+                return Result<VideoProcessingResult>.Failure(detectionResult.ErrorMessage!);
+            }
+
+            List<FrameDetectionResult> frameResults = detectionResult.Value!;
 
             int totalObjectCount = frameResults.SelectMany(r => r.Detections).Count();
             VideoProcessingProgress progress = VideoProcessingProgress.CreateCompletionProgress(totalFrames: frameResults.Count,
@@ -76,24 +94,26 @@ public class UploadedVideoProcessor
                                    frameResults.Count,
                                    allObjects.Sum(s => s.Count));
 
-            return new VideoProcessingResult
-                   {
-                       DetectedObjects = allObjects,
-                       FrameResults = frameResults.ToArray(),
-                       ProcessedDuration = videoDuration,
-                       TotalFrames = frameResults.Count,
-                       VideoFilePath = uploadedVideoFile.FilePath,
-                       VideoFileName = uploadedVideoFile.Name,
-                       VideoFileSize = uploadedVideoFile.Size,
-                       UploadedAt = uploadedVideoFile.UploadedAt,
-                       CompletedAt = DateTimeOffset.UtcNow
-                   };
+            VideoProcessingResult result = new()
+                                           {
+                                               DetectedObjects = allObjects,
+                                               FrameResults = frameResults.ToArray(),
+                                               ProcessedDuration = videoDuration,
+                                               TotalFrames = frameResults.Count,
+                                               VideoFilePath = uploadedVideoFile.FilePath,
+                                               VideoFileName = uploadedVideoFile.Name,
+                                               VideoFileSize = uploadedVideoFile.Size,
+                                               UploadedAt = uploadedVideoFile.UploadedAt,
+                                               CompletedAt = DateTimeOffset.UtcNow
+                                           };
+
+            return Result<VideoProcessingResult>.Success(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing video");
 
-            throw;
+            return Result<VideoProcessingResult>.Failure($"Video processing failed: {ex.Message}");
         }
     }
 
@@ -102,8 +122,8 @@ public class UploadedVideoProcessor
     /// </summary>
     /// <param name="uploadedVideoFile">The uploaded video file containing metadata and file paths</param>
     /// <param name="progressCallback">Optional callback to report video processing progress</param>
-    /// <returns>Tuple containing list of frame information and video duration</returns>
-    private async Task<(List<FrameInfo> frameInfo, TimeSpan videoDuration)> ExtractAllFramesAsync(
+    /// <returns>A Result containing tuple of frame information and video duration or an error message</returns>
+    private async Task<Result<(List<FrameInfo> frameInfo, TimeSpan videoDuration)>> ExtractAllFramesAsync(
         UploadedVideoFile uploadedVideoFile,
         IProgress<VideoProcessingProgress> progressCallback)
     {
@@ -128,11 +148,22 @@ public class UploadedVideoProcessor
             TimeSpan timestamp = TimeSpan.FromSeconds(seconds);
             string outputPath = Path.Combine(videoFramesDirectory, $"frame_{frameCounter:D6}.jpg");
 
-            await _frameExtractor.ExtractFrameAsync(uploadedVideoFile.FilePath, outputPath, timestamp);
+            Result<string> extractionResult = await _frameExtractor.ExtractFrameAsync(uploadedVideoFile.FilePath,
+                                                                                      outputPath,
+                                                                                      timestamp);
+            if (extractionResult.IsFailure)
+            {
+                _logger.LogError("Failed to extract frame {FrameNumber} at {Timestamp}s: {ErrorMessage}",
+                                 frameCounter,
+                                 seconds,
+                                 extractionResult.ErrorMessage);
+
+                return Result<(List<FrameInfo>, TimeSpan)>.Failure($"Frame extraction failed: {extractionResult.ErrorMessage}");
+            }
 
             frameInfoList.Add(new FrameInfo
                               {
-                                  FrameNumber = frameCounter, Timestamp = timestamp, FilePath = outputPath
+                                  FrameNumber = frameCounter, Timestamp = timestamp, FilePath = extractionResult.Value!
                               });
 
             frameCounter++;
@@ -148,7 +179,7 @@ public class UploadedVideoProcessor
 
         _logger.LogInformation("Phase 1 complete: Extracted {ActualFrameCount} frames", frameInfoList.Count);
 
-        return (frameInfoList, videoDuration);
+        return Result<(List<FrameInfo>, TimeSpan)>.Success((frameInfoList, videoDuration));
     }
 
     /// <summary>
@@ -156,8 +187,8 @@ public class UploadedVideoProcessor
     /// </summary>
     /// <param name="frameInfoList">List of frame information</param>
     /// <param name="progressCallback">Optional callback to report detailed progress</param>
-    /// <returns>List of frame detection results</returns>
-    private async Task<List<FrameDetectionResult>> DetectObjectsInFramesAsync(
+    /// <returns>A Result containing list of frame detection results or an error message</returns>
+    private async Task<Result<List<FrameDetectionResult>>> DetectObjectsInFramesAsync(
         List<FrameInfo> frameInfoList,
         IProgress<VideoProcessingProgress> progressCallback)
     {
@@ -192,7 +223,9 @@ public class UploadedVideoProcessor
                         processedFrames++;
 
                         double detectionProgress = (double)processedFrames / frameInfoList.Count;
-                        progressCallback?.Report(VideoProcessingProgress.CreateDetectionProgress(detectionProgress, processedFrames, frameInfoList.Count));
+                        progressCallback?.Report(VideoProcessingProgress.CreateDetectionProgress(detectionProgress,
+                                                                                                 processedFrames,
+                                                                                                 totalFrames: frameInfoList.Count));
 
                         _logger.LogDebug("Processed frame {FrameNumber} at {Timestamp}s. Found {Count} objects",
                                          frameInfo.FrameNumber,
@@ -203,9 +236,10 @@ public class UploadedVideoProcessor
             }
         }
 
-        _logger.LogInformation("Phase 2 complete: Detected objects in {ProcessedFrameCount} frames", processedFrames);
+        _logger.LogInformation("Phase 2 complete: Detected objects in {ProcessedFrameCount} frames",
+                               processedFrames);
 
-        return frameResults;
+        return Result<List<FrameDetectionResult>>.Success(frameResults);
     }
 }
 

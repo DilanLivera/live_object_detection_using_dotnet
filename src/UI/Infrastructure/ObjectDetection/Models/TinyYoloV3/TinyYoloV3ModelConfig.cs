@@ -1,4 +1,4 @@
-namespace UI.Infrastructure.Models.TinyYoloV3;
+namespace UI.Infrastructure.ObjectDetection.Models.TinyYoloV3;
 
 /// <summary>
 /// Configuration specific to the Tiny YOLOv3 model.

@@ -1,4 +1,6 @@
-namespace UI.Infrastructure.UploadedVideoProcessing;
+using System.Diagnostics;
+
+namespace UI.Components.Pages.Upload;
 
 /// <summary>
 /// Represents an uploaded video file with its metadata and operations
@@ -42,14 +44,13 @@ public class UploadedVideoFile
     /// </summary>
     /// <param name="fileName">Original file name</param>
     /// <param name="fileSize">Size in bytes</param>
+    /// <param name="filePath">Path where the file was saved</param>
     /// <exception cref="ArgumentException">Thrown if file name is invalid or size is not positive</exception>
-    public UploadedVideoFile(string fileName, long fileSize)
+    public UploadedVideoFile(string fileName, long fileSize, string filePath)
     {
-        // set file name
-        if (string.IsNullOrEmpty(fileName))
-        {
-            throw new ArgumentException("File name cannot be empty", nameof(fileName));
-        }
+        // Set file name
+        Debug.Assert(!string.IsNullOrWhiteSpace(fileName), "File name cannot be null or whitespace");
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
 
         bool isVideoFile = SupportedExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
         if (!isVideoFile)
@@ -59,37 +60,23 @@ public class UploadedVideoFile
 
         Name = fileName;
 
-        // set file path
-        string uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        // Set file path
+        Debug.Assert(!string.IsNullOrWhiteSpace(filePath), "File path cannot be null or whitespace");
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        FilePath = filePath;
 
-        if (!Directory.Exists(uploadsPath))
-        {
-            Directory.CreateDirectory(uploadsPath);
-        }
-
-        string extension = Path.GetExtension(fileName);
-        string tempFileName = Path.GetRandomFileName() + extension;
-        FilePath = Path.Combine(uploadsPath, tempFileName);
-
-        // set file size
+        // Set file size
         if (fileSize <= 0)
         {
             throw new ArgumentException("File size must be greater than zero", nameof(fileSize));
         }
-
         Size = fileSize;
 
-        // set frame directory path
+        // Set frame directory path
         string framesDirectoryPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "frames");
         string originalFileName = Path.GetFileNameWithoutExtension(Name);
         string safeFileName = string.Join("_", originalFileName.Split(Path.GetInvalidFileNameChars()));
         string videoId = $"{safeFileName}_{UploadedAt:yyyyMMddHHmmss}";
-
-        if (!Directory.Exists(framesDirectoryPath))
-        {
-            Directory.CreateDirectory(framesDirectoryPath);
-        }
-
         FrameDirectoryPath = Path.Combine(framesDirectoryPath, videoId);
     }
 
