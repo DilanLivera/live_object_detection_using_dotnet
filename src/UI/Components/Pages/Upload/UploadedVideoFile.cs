@@ -25,6 +25,11 @@ public class UploadedVideoFile
     public string Name { get; }
 
     /// <summary>
+    /// The filename assigned to the video file when saved to disk
+    /// </summary>
+    public string SavedFileName { get; }
+
+    /// <summary>
     /// Size of the file in bytes
     /// </summary>
     public long Size { get; }
@@ -64,6 +69,9 @@ public class UploadedVideoFile
         Debug.Assert(!string.IsNullOrWhiteSpace(filePath), "File path cannot be null or whitespace");
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         FilePath = filePath;
+
+        // Set saved file name
+        SavedFileName = Path.GetFileName(filePath);
 
         // Set file size
         if (fileSize <= 0)

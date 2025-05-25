@@ -13,11 +13,14 @@ builder.Services
        .AddRazorComponents()
        .AddInteractiveServerComponents();
 
+
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 builder.Services.AddSingleton<UploadedVideoProcessor>();
 
 builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddProblemDetails();
 
 WebApplication app = builder.Build();
 
@@ -35,6 +38,8 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.UseApplicationAuth();
+
+app.MapVideoEndpoints();
 
 app.MapRazorComponents<App>()
    .AddInteractiveServerRenderMode();
