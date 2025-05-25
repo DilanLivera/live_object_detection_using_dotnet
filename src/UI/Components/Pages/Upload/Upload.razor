@@ -9,7 +9,9 @@
 <div class="container mx-auto py-10 px-4">
     <div class="max-w-3xl mx-auto">
         <div class="space-y-4">
-            <h1 class="text-3xl font-bold tracking-tight">Upload Video</h1>
+            <h1 class="text-3xl font-bold tracking-tight">
+                Upload Video
+            </h1>
             <p class="text-gray-400">
                 Upload a video file to detect objects. Supported formats: MP4
             </p>
@@ -39,7 +41,9 @@
                 </label>
                 @if (_videoFile != null && _objectDetectionState.Status != ObjectDetectionStatus.Failed)
                 {
-                    <span class="ml-3 text-gray-400">@_videoFile.Name (@Math.Round((double)_videoFile.Size / (1024 * 1024), 1) MB) @(_objectDetectionState.VideoDuration != null ? $@"- {_objectDetectionState.VideoDuration.Value:hh\:mm\:ss}" : "")</span>
+                    <span class="ml-3 text-gray-400">
+                        @_videoFile.Name (@Math.Round((double)_videoFile.Size / (1024 * 1024), 1) MB) @(_objectDetectionState.VideoDuration != null ? $@"- {_objectDetectionState.VideoDuration.Value:hh\:mm\:ss}" : "")
+                    </span>
                 }
             </div>
         </div>
@@ -58,12 +62,16 @@
                                 }
                                 <span class="@message.TextClass">@message.Text</span>
                             </div>
-                            <span class="text-xs text-gray-500">@message.CreatedAt.ToString(format: "HH:mm:ss")</span>
+                            <span class="text-xs text-gray-500">
+                                @message.CreatedAt.ToString(format: "HH:mm:ss")
+                            </span>
                         </div>
                         @if (message.ShouldShowProgress && message.Progress > 0)
                         {
                             <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
-                                <div class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: @(message.Progress * 100)%"></div>
+                                <div class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
+                                     style="width: @(message.Progress * 100)%">
+                                </div>
                             </div>
                         }
                         @if (!string.IsNullOrEmpty(message.Details))
@@ -87,17 +95,18 @@
 
                     @{
                         var allDetections = _objectDetectionState.FrameResults
-                                                                 .SelectMany(frame => frame.Detections.Select(detection => new
-                                                                                                                           {
-                                                                                                                               FrameNumber = frame.FrameNumber,
-                                                                                                                               Timestamp = frame.Timestamp,
-                                                                                                                               Detection = detection
-                                                                                                                           }))
+                                                                 .SelectMany(frame => frame.Detections
+                                                                                           .Select(detection => new
+                                                                                                                {
+                                                                                                                    frame.FrameNumber,
+                                                                                                                    frame.Timestamp,
+                                                                                                                    Detection = detection
+                                                                                                                }))
                                                                  .ToList();
 
                         var detectionSummary = allDetections
                                                .GroupBy(x => x.Detection.Label)
-                                               .Select(g => new { Label = g.Key, Count = g.Count(), AvgConfidence = g.Average(x => x.Detection.Confidence) })
+                                               .Select(g => new { Label = g.Key, Count = g.Count(), MaxConfidence = g.Max(x => x.Detection.Confidence) })
                                                .OrderByDescending(x => x.Count)
                                                .ToList();
 
@@ -107,14 +116,20 @@
                     {
                         <div class="space-y-4">
                             <div class="space-y-2">
-                                <h3 class="font-medium">Detection Summary:</h3>
+                                <h3 class="font-medium">
+                                    Detection Summary:
+                                </h3>
                                 <div class="grid grid-cols-2 gap-2">
                                     @foreach (var summary in detectionSummary)
                                     {
                                         <div class="p-2 bg-gray-800/20 border border-gray-600/20 rounded">
                                             <div class="flex justify-between">
-                                                <span class="text-blue-300">@summary.Label</span>
-                                                <span class="text-sm text-gray-400">@summary.Count × (@Math.Round(summary.AvgConfidence * 100, 1)%)</span>
+                                                <span class="text-blue-300">
+                                                    @summary.Label
+                                                </span>
+                                                <span class="text-sm text-gray-400">
+                                                    @summary.Count detections (max: @Math.Round(summary.MaxConfidence * 100, 1)%)
+                                                </span>
                                             </div>
                                         </div>
                                     }
@@ -122,13 +137,14 @@
                             </div>
 
                             <div class="space-y-2">
-                                <h3 class="font-medium">Detections per frame:</h3>
+                                <h3 class="font-medium">
+                                    Detections per frame:
+                                </h3>
                                 <div class="max-h-96 overflow-y-auto space-y-2">
                                     @{
-                                        var frameGroups = allDetections
-                                                          .GroupBy(x => x.FrameNumber)
-                                                          .OrderBy(g => g.Key)
-                                                          .ToList();
+                                        var frameGroups = allDetections.GroupBy(x => x.FrameNumber)
+                                                                       .OrderBy(g => g.Key)
+                                                                       .ToList();
                                     }
 
                                     @foreach (var frameGroup in frameGroups)
@@ -147,7 +163,9 @@
                                                 {
                                                     <div class="flex items-center justify-between">
                                                         <div class="flex items-center space-x-2">
-                                                            <span class="font-medium text-blue-300">@detection.Detection.Label</span>
+                                                            <span class="font-medium text-blue-300">
+                                                                @detection.Detection.Label
+                                                            </span>
                                                             <span class="text-xs text-gray-500">
                                                                 x: @Math.Round(detection.Detection.BoundingBox.X, 0), y: @Math.Round(detection.Detection.BoundingBox.Y, 0), w: @Math.Round(detection.Detection.BoundingBox.Width, 0), h: @Math.Round(detection.Detection.BoundingBox.Height, 0)
                                                             </span>
@@ -195,7 +213,7 @@
             case 0:
                 return;
             case > MaxAllowedFiles:
-                _objectDetectionState.SetFailed("Please select only one video file.");
+                _objectDetectionState.SetFailed(errorMessage: "Please select only one video file.");
 
                 return;
         }
@@ -209,62 +227,44 @@
 
     private async Task UploadVideoAsync(IBrowserFile file)
     {
-        try
+        Result<string> result = await FileStorageService.SaveFileAsync(file, MaxFileSizeInBytes);
+
+        if (!result.IsSuccess)
         {
-            Result<string> uploadResult = await FileStorageService.SaveFileAsync(file, MaxFileSizeInBytes);
+            Logger.LogWarning("File upload failed: {ErrorMessage}", result.ErrorMessage);
 
-            if (!uploadResult.IsSuccess)
-            {
-                Logger.LogWarning("File upload failed: {ErrorMessage}", uploadResult.ErrorMessage);
+            _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {result.ErrorMessage}");
 
-                _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {uploadResult.ErrorMessage}");
-
-                return;
-            }
-
-            _videoFile = new UploadedVideoFile(file.Name, file.Size, uploadResult.Value!);
-
-            _objectDetectionState.SetUploaded(_videoFile.Name);
-
-            Logger.LogInformation("Video file saved to {FilePath}", _videoFile.FilePath);
+            return;
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Unexpected error saving video file");
 
-            _objectDetectionState.SetFailed(errorMessage: $"Unexpected error saving file: {ex.Message}");
-        }
+        _videoFile = new UploadedVideoFile(file.Name, file.Size, filePath: result.Value!);
+
+        _objectDetectionState.SetUploaded(_videoFile.Name);
+
+        Logger.LogInformation("Video file saved to {FilePath}", _videoFile.FilePath);
     }
 
     private async Task ProcessVideoAsync()
     {
-        try
+        Progress<VideoProcessingProgress> progressHandler = new(HandleProcessingProgress);
+
+        Result<VideoProcessingResult> result = await UploadedVideoProcessor.ProcessVideoAsync(_videoFile!,
+                                                                                              progressCallback: progressHandler);
+
+        if (!result.IsSuccess)
         {
-            Progress<VideoProcessingProgress> progressHandler = new(HandleProcessingProgress);
+            Logger.LogWarning("Video processing failed: {ErrorMessage}", result.ErrorMessage);
 
-            Result<VideoProcessingResult> processingResult = await UploadedVideoProcessor.ProcessVideoAsync(_videoFile!,
-                                                                                                            progressCallback: progressHandler);
+            _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {result.ErrorMessage}");
 
-            if (!processingResult.IsSuccess)
-            {
-                Logger.LogWarning("Video processing failed: {ErrorMessage}", processingResult.ErrorMessage);
-
-                _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {processingResult.ErrorMessage}");
-
-                return;
-            }
-
-            Debug.Assert(_videoFile is not null, "_videoFile is null");
-            _videoFile.MarkAsProcessed();
-
-            _objectDetectionState.SetProcessed(processingResult.Value!);
+            return;
         }
-        catch (Exception ex)
-        {
-            _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {ex.Message}");
 
-            Logger.LogError(ex, "Error processing video");
-        }
+        Debug.Assert(_videoFile is not null, "_videoFile is null");
+        _videoFile.MarkAsProcessed();
+
+        _objectDetectionState.SetProcessed(result.Value!);
     }
 
     private void HandleProcessingProgress(VideoProcessingProgress progress)
