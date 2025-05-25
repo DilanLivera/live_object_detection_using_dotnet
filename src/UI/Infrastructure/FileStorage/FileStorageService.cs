@@ -44,9 +44,6 @@ public class FileStorageService
         Debug.Assert(file != null, "File cannot be null");
         Debug.Assert(maxFileSizeInBytes > 0, "Maximum file size must be greater than zero");
 
-        ArgumentNullException.ThrowIfNull(file);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxFileSizeInBytes, 0);
-
         string extension = Path.GetExtension(file.Name).ToLowerInvariant();
         if (!_allowedExtensions.Contains(extension))
         {
@@ -88,4 +85,48 @@ public class FileStorageService
             return Result<string>.Failure($"Failed to save file: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Gets a file stream for reading a stored file.
+    /// </summary>
+    /// <param name="filename">The filename to retrieve.</param>
+    /// <returns>A Result containing the file stream and content type on success or an error message on failure.</returns>
+    public Result<(FileStream Stream, string ContentType)> GetFileStream(string filename)
+    {
+        Debug.Assert(!string.IsNullOrWhiteSpace(filename), "Filename cannot be null or empty");
+
+        string extension = Path.GetExtension(filename).ToLowerInvariant();
+
+        // IMPORTANT: Without this, malicious input like "../../../etc/passwd" could access files outside uploads directory
+        string safeFilename = Path.GetFileName(filename);
+        string filePath = Path.Combine(_uploadsPath, safeFilename);
+
+        if (!File.Exists(filePath))
+        {
+            _logger.LogWarning("Video file not found: {FilePath}", filePath);
+
+            return Result<(FileStream, string)>.Failure($"The requested video file '{filename}' could not be found");
+        }
+
+        try
+        {
+            FileStream fileStream = new(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            string contentType = extension.ToLowerInvariant() switch
+            {
+                ".mp4" => "video/mp4",
+                ".webm" => "video/webm",
+                ".mov" => "video/quicktime",
+                _ => "application/octet-stream"
+            };
+
+            return Result<(FileStream, string)>.Success((fileStream, contentType));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error opening video file: {Filename}", filename);
+
+            return Result<(FileStream, string)>.Failure("An error occurred while accessing the video file");
+        }
+    }
+
 }

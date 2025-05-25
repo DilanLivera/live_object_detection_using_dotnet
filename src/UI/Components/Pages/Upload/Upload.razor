@@ -3,6 +3,7 @@
 @inject ILogger<Upload> Logger
 @inject UploadedVideoProcessor UploadedVideoProcessor
 @inject FileStorageService FileStorageService
+@inject IJSRuntime JsRuntime
 @using System.Diagnostics
 @using UI.Infrastructure.FileStorage
 
@@ -191,6 +192,26 @@
                     }
                 </div>
             </div>
+
+            @if (_objectDetectionState.Status == ObjectDetectionStatus.Processed)
+            {
+                <div class="mt-8 p-4 bg-gray-800/20 border border-gray-600/20 rounded-lg">
+                    <div class="space-y-4">
+                        <div class="relative rounded-lg overflow-hidden bg-black">
+                            <div class="relative aspect-video">
+                                <video id="processedVideo"
+                                       class="absolute top-0 left-0 w-full h-full object-contain"
+                                       controls
+                                       preload="metadata"
+                                       src="@GetVideoUrl()">
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            }
         }
     </div>
 </div>
@@ -206,7 +227,10 @@
     {
         _objectDetectionState.Reset();
         _videoFile = null;
+        StateHasChanged();
+
         _objectDetectionState.SetUploading();
+        StateHasChanged();
 
         switch (eventArgs.FileCount)
         {
@@ -214,6 +238,7 @@
                 return;
             case > MaxAllowedFiles:
                 _objectDetectionState.SetFailed(errorMessage: "Please select only one video file.");
+                StateHasChanged();
 
                 return;
         }
@@ -234,6 +259,7 @@
             Logger.LogWarning("File upload failed: {ErrorMessage}", result.ErrorMessage);
 
             _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {result.ErrorMessage}");
+            StateHasChanged();
 
             return;
         }
@@ -241,6 +267,7 @@
         _videoFile = new UploadedVideoFile(file.Name, file.Size, filePath: result.Value!);
 
         _objectDetectionState.SetUploaded(_videoFile.Name);
+        StateHasChanged();
 
         Logger.LogInformation("Video file saved to {FilePath}", _videoFile.FilePath);
     }
@@ -257,6 +284,7 @@
             Logger.LogWarning("Video processing failed: {ErrorMessage}", result.ErrorMessage);
 
             _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {result.ErrorMessage}");
+            StateHasChanged();
 
             return;
         }
@@ -265,6 +293,7 @@
         _videoFile.MarkAsProcessed();
 
         _objectDetectionState.SetProcessed(result.Value!);
+        StateHasChanged();
     }
 
     private void HandleProcessingProgress(VideoProcessingProgress progress)
@@ -276,5 +305,15 @@
     private bool ShouldDisableInput() => _objectDetectionState.Status is not (ObjectDetectionStatus.None or
         ObjectDetectionStatus.Processed or
         ObjectDetectionStatus.Failed);
+
+    private string GetVideoUrl()
+    {
+        Debug.Assert(_videoFile != null, "Video file should not be null when getting video URL");
+        Debug.Assert(!string.IsNullOrWhiteSpace(_videoFile.SavedFileName),
+                     "Video file saved filename should not be null or empty when getting video URL");
+
+        return $"/api/video/{Uri.EscapeDataString(_videoFile.SavedFileName)}";
+    }
+
 
 }
