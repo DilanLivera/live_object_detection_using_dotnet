@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using UI.Infrastructure.BackgroundServices;
 using UI.Infrastructure.ObjectDetection;
 using UI.Infrastructure.VideoProcessing;
 using UI.Infrastructure.FileStorage;
@@ -33,6 +34,9 @@ public static class InfrastructureServicesRegistration
         services.AddSingleton<FFmpegFrameExtractor>();
 
         services.AddSingleton<FileStorageService>();
+
+        services.AddHostedService<FileCleanupService>();
+
 
         return services;
     }
