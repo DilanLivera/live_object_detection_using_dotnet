@@ -19,7 +19,7 @@ public class Result<T>
     /// <summary>
     /// Gets the value if the operation was successful.
     /// </summary>
-    public T? Value { get; private init; }
+    public T Value { get; private init; } = default!;
 
     /// <summary>
     /// Gets the error message if the operation failed.

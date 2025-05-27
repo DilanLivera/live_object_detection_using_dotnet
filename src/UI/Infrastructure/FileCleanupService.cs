@@ -1,6 +1,4 @@
-using UI.Infrastructure.FileStorage;
-
-namespace UI.Infrastructure.BackgroundServices;
+namespace UI.Infrastructure;
 
 /// <summary>
 /// Background service that handles cleanup of uploaded files and directories.
@@ -9,18 +7,18 @@ namespace UI.Infrastructure.BackgroundServices;
 public class FileCleanupService : BackgroundService
 {
     private readonly ILogger<FileCleanupService> _logger;
-    private readonly FileStorageService _fileStorageService;
+    private readonly FileService _fileService;
     private readonly string _uploadsPath;
     private readonly TimeSpan _fileMaxAge;
     private readonly TimeSpan _cleanupInterval;
 
     public FileCleanupService(
         ILogger<FileCleanupService> logger,
-        FileStorageService fileStorageService,
+        FileService fileService,
         IConfiguration configuration)
     {
         _logger = logger;
-        _fileStorageService = fileStorageService;
+        _fileService = fileService;
         _uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
 
         double fileMaxAgeInHours = configuration.GetValue("FileCleanup:FileMaxAgeInHours", defaultValue: 1.0);
@@ -35,7 +33,7 @@ public class FileCleanupService : BackgroundService
 
         _logger.LogInformation("Cleanup uploads directory: {UploadsPath}", _uploadsPath);
 
-        Result<bool> clearDirectoryResult = _fileStorageService.ClearDirectory(_uploadsPath);
+        Result<bool> clearDirectoryResult = _fileService.ClearDirectory(_uploadsPath);
 
         if (clearDirectoryResult.IsFailure)
         {
@@ -55,7 +53,7 @@ public class FileCleanupService : BackgroundService
             {
                 _logger.LogInformation("Starting periodic cleanup of files older than {MaxAge}", _fileMaxAge);
 
-                Result<int> deleteFilesResult = _fileStorageService.DeleteFiles(_fileMaxAge);
+                Result<int> deleteFilesResult = _fileService.DeleteOldFilesInUploadsDirectory(_fileMaxAge);
 
                 if (!deleteFilesResult.IsSuccess)
                 {
