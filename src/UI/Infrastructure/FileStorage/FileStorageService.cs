@@ -166,9 +166,9 @@ public class FileStorageService
     }
 
     /// <summary>
-    /// Deletes a directory and all its contents.
+    /// Deletes directory.
     /// </summary>
-    /// <param name="directoryPath">The path to the directory to delete.</param>
+    /// <param name="directoryPath">The path to the directory to clear.</param>
     /// <returns>A Result indicating success or failure with error message.</returns>
     public Result<bool> DeleteDirectory(string directoryPath)
     {
@@ -185,6 +185,8 @@ public class FileStorageService
         {
             Directory.Delete(directoryPath, recursive: true);
 
+            _logger.LogDebug("Successfully deleted directory: {DirectoryPath}", directoryPath);
+
             return Result<bool>.Success(true);
         }
         catch (Exception ex)
@@ -192,6 +194,90 @@ public class FileStorageService
             _logger.LogError(ex, "Failed to delete directory: {DirectoryPath}", directoryPath);
 
             return Result<bool>.Failure($"Failed to delete directory: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Removes all contents in the directory.
+    /// </summary>
+    /// <param name="directoryPath">The path to the directory to clear.</param>
+    /// <returns>A Result indicating success or failure with error message.</returns>
+    public Result<bool> ClearDirectory(string directoryPath)
+    {
+        Debug.Assert(!string.IsNullOrWhiteSpace(directoryPath), "Directory path cannot be null or empty");
+
+        if (!Directory.Exists(directoryPath))
+        {
+            _logger.LogDebug("Directory does not exist, nothing to delete: {DirectoryPath}", directoryPath);
+
+            return Result<bool>.Success(true);
+        }
+
+        try
+        {
+            DeleteDirectory(directoryPath);
+
+            Directory.CreateDirectory(directoryPath);
+
+            _logger.LogDebug("Successfully cleared directory contents: {DirectoryPath}", directoryPath);
+
+            return Result<bool>.Success(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear directory contents: {DirectoryPath}", directoryPath);
+
+            return Result<bool>.Failure($"Failed to clear directory contents: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Deletes files in the uploads directory that are older than the specified age.
+    /// </summary>
+    /// <param name="maxAge">Maximum age of files to keep.</param>
+    /// <returns>A Result containing the number of deleted files on success or an error message on failure.</returns>
+    public Result<int> DeleteFiles(TimeSpan maxAge)
+    {
+        Debug.Assert(maxAge > TimeSpan.Zero, "Max age must be greater than zero");
+
+        if (!Directory.Exists(_uploadsPath))
+        {
+            _logger.LogDebug("Uploads directory does not exist, skipping cleanup");
+
+            return Result<int>.Success(0);
+        }
+
+        try
+        {
+            DateTime cutoffTime = DateTime.UtcNow - maxAge;
+            int deletedFiles = 0;
+
+            string[] files = Directory.GetFiles(_uploadsPath,
+                                                searchPattern: "*.*",
+                                                SearchOption.TopDirectoryOnly);
+
+            foreach (string filePath in files)
+            {
+                FileInfo fileInfo = new(filePath);
+                if (fileInfo.CreationTimeUtc < cutoffTime)
+                {
+                    File.Delete(filePath);
+
+                    deletedFiles++;
+
+                    _logger.LogDebug("Deleted old file: {FilePath}", filePath);
+                }
+            }
+
+            _logger.LogDebug("Deleted {DeletedFiles} old files", deletedFiles);
+
+            return Result<int>.Success(deletedFiles);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "File cleanup failed");
+
+            return Result<int>.Failure($"Failed to delete old files: {ex.Message}");
         }
     }
 
