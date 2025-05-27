@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using UI.Infrastructure.ObjectDetection;
 using UI.Infrastructure.VideoProcessing;
@@ -22,7 +24,7 @@ public static class InfrastructureServicesRegistration
     {
         services.AddHttpClient();
 
-        services.AddApplicationAuth(configuration);
+        services.AddAuth(configuration);
 
         services.AddScoped<CircuitHandler, CircuitHandlerService>();
 
@@ -31,6 +33,40 @@ public static class InfrastructureServicesRegistration
         services.AddSingleton<FFmpegFrameExtractor>();
 
         services.AddSingleton<FileStorageService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Adds authentication services to the application.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
+    private static IServiceCollection AddAuth(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddAuthentication(options =>
+                {
+                    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+                })
+                .AddCookie()
+                .AddGoogle(options =>
+                {
+                    configuration.Bind(key: "Authentication:Google", options);
+
+                    if (string.IsNullOrEmpty(options.ClientId))
+                    {
+                        throw new InvalidOperationException("Google ClientId not found.");
+                    }
+
+                    if (string.IsNullOrEmpty(options.ClientSecret))
+                    {
+                        throw new InvalidOperationException("Google ClientSecret not found.");
+                    }
+                });
+
+        services.AddAuthorizationCore();
 
         return services;
     }
