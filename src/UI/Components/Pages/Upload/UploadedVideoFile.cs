@@ -5,19 +5,19 @@ namespace UI.Components.Pages.Upload;
 /// <summary>
 /// Represents an uploaded video file with its metadata and operations
 /// </summary>
-public class UploadedVideoFile
+public sealed class UploadedVideoFile
 {
     private static readonly string[] SupportedExtensions = [".mp4"]; // Can be expanded to include .webm, .mov, etc.
 
     /// <summary>
     /// Path to the saved video file on disk
     /// </summary>
-    public string FilePath { get; }
+    public string FilePath { get; private set; } = "";
 
     /// <summary>
     /// Path to the directory where frames will be extracted
     /// </summary>
-    public string FrameDirectoryPath { get; }
+    public string FramesDirectoryPath { get; }
 
     /// <summary>
     /// Original file name
@@ -27,7 +27,7 @@ public class UploadedVideoFile
     /// <summary>
     /// The filename assigned to the video file when saved to disk
     /// </summary>
-    public string SavedFileName { get; }
+    public string SavedFileName => Path.GetFileName(FilePath);
 
     /// <summary>
     /// Size of the file in bytes
@@ -54,24 +54,8 @@ public class UploadedVideoFile
     public UploadedVideoFile(string fileName, long fileSize, string filePath)
     {
         // Set file name
-        Debug.Assert(!string.IsNullOrWhiteSpace(fileName), "File name cannot be null or whitespace");
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-
-        bool isVideoFile = SupportedExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
-        if (!isVideoFile)
-        {
-            throw new ArgumentException($"File must be one of the supported formats: {string.Join(", ", SupportedExtensions)}", nameof(fileName));
-        }
-
-        Name = fileName;
-
-        // Set file path
-        Debug.Assert(!string.IsNullOrWhiteSpace(filePath), "File path cannot be null or whitespace");
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        FilePath = filePath;
-
-        // Set saved file name
-        SavedFileName = Path.GetFileName(filePath);
+        OriginalFileName = fileName;
 
         // Set file size
         if (fileSize <= 0)
@@ -87,6 +71,26 @@ public class UploadedVideoFile
         string videoId = $"{safeFileName}_{UploadedAt:yyyyMMddHHmmss}";
         FrameDirectoryPath = Path.Combine(framesDirectoryPath, videoId);
     }
+
+    // todo: add doc comments
+    public void SetFilePath(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        FilePath = filePath;
+    }
+
+    // todo: add doc summary
+    public bool IsVideoFile()
+    {
+        Debug.Assert(OriginalFileName is not null, "OriginalFileName must not be null");
+
+        return SupportedExtensions.Contains(Path.GetExtension(OriginalFileName)
+                                                .ToLowerInvariant());
+    }
+
+    // todo: add doc summary
+    public bool IsFileEmpty() => SizeInBytes <= 0;
 
     /// <summary>
     /// Sets the processing completion time to the current time
