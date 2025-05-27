@@ -91,7 +91,7 @@
             <div class="mt-6 p-4">
                 <div class="space-y-4">
                     <p class="font-medium">
-                        Video processing complete: Found @_objectDetectionState.FrameResults.Sum(f => f.Detections.Length) total detections across @_objectDetectionState.TotalFrames frames.
+                        Video processing complete: Found @_objectDetectionState.FrameResults.Sum(f => f.Detections.Length) total detections across @_objectDetectionState.TotalFrames frames (@Math.Round(_objectDetectionState.VideoFrameRate, digits: 0) fps).
                     </p>
 
                     @{
@@ -182,13 +182,6 @@
                                 </div>
                             </div>
                         </div>
-                    }
-
-                    @if (_objectDetectionState.VideoFrameRate > 0)
-                    {
-                        <p class="text-sm">
-                            Video frame rate: @Math.Round(_objectDetectionState.VideoFrameRate, digits: 2) fps
-                        </p>
                     }
                 </div>
             </div>

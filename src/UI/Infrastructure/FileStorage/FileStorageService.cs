@@ -25,7 +25,7 @@ public class FileStorageService
 
         if (!Directory.Exists(_uploadsPath))
         {
-            Directory.CreateDirectory(_uploadsPath);
+            _ = Directory.CreateDirectory(_uploadsPath);
         }
     }
 
@@ -126,6 +126,72 @@ public class FileStorageService
             _logger.LogError(ex, "Error opening video file: {Filename}", filename);
 
             return Result<(FileStream, string)>.Failure("An error occurred while accessing the video file");
+        }
+    }
+
+    /// <summary>
+    /// Reads an image file and returns image bytes.
+    /// </summary>
+    /// <param name="filePath">The full path to the image file.</param>
+    /// <returns>A Result containing the image bytes on success or an error message on failure.</returns>
+    public async Task<Result<byte[]>> ReadImageFileAsync(string filePath)
+    {
+        Debug.Assert(!string.IsNullOrWhiteSpace(filePath), "File path cannot be null or empty");
+
+        if (!File.Exists(filePath))
+        {
+            _logger.LogWarning("Image file not found: {FilePath}", filePath);
+
+            return Result<byte[]>.Failure($"The image file could not be found: {filePath}");
+        }
+
+        try
+        {
+            await using FileStream fileStream = new(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using MemoryStream memoryStream = new();
+
+            await fileStream.CopyToAsync(memoryStream);
+            byte[] imageBytes = memoryStream.ToArray();
+
+            _logger.LogDebug("Successfully read image file: {FilePath} ({Size} bytes)", filePath, imageBytes.Length);
+
+            return Result<byte[]>.Success(imageBytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading image file: {FilePath}", filePath);
+
+            return Result<byte[]>.Failure($"Failed to read image file: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Deletes a directory and all its contents.
+    /// </summary>
+    /// <param name="directoryPath">The path to the directory to delete.</param>
+    /// <returns>A Result indicating success or failure with error message.</returns>
+    public Result<bool> DeleteDirectory(string directoryPath)
+    {
+        Debug.Assert(!string.IsNullOrWhiteSpace(directoryPath), "Directory path cannot be null or empty");
+
+        if (!Directory.Exists(directoryPath))
+        {
+            _logger.LogDebug("Directory does not exist, nothing to delete: {DirectoryPath}", directoryPath);
+
+            return Result<bool>.Success(true);
+        }
+
+        try
+        {
+            Directory.Delete(directoryPath, recursive: true);
+
+            return Result<bool>.Success(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete directory: {DirectoryPath}", directoryPath);
+
+            return Result<bool>.Failure($"Failed to delete directory: {ex.Message}");
         }
     }
 

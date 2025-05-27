@@ -1,5 +1,6 @@
 using UI.Components;
 using Serilog;
+using UI;
 using UI.Components.Pages.Upload;
 using UI.Infrastructure;
 
@@ -37,7 +38,10 @@ app.UseStaticFiles();
 
 app.UseAntiforgery();
 
-app.UseApplicationAuth();
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapAuthEndpoints();
 
 app.MapVideoEndpoints();
 

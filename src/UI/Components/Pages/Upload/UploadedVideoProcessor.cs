@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using UI.Infrastructure.FileStorage;
 using UI.Infrastructure.ObjectDetection;
 using UI.Infrastructure.ObjectDetection.Models;
 using UI.Infrastructure.VideoProcessing;
@@ -11,6 +13,7 @@ public class UploadedVideoProcessor
 {
     private readonly ILogger<UploadedVideoProcessor> _logger;
     private readonly ObjectDetector _objectDetector;
+    private readonly FileStorageService _fileStorageService;
     private readonly double _frameIntervalInSeconds;
     private readonly double _imageQuality;
     private readonly bool _shouldCleanupFrames;
@@ -19,11 +22,13 @@ public class UploadedVideoProcessor
     public UploadedVideoProcessor(
         ILogger<UploadedVideoProcessor> logger,
         ObjectDetector objectDetector,
+        FileStorageService fileStorageService,
         IConfiguration configuration,
         FFmpegFrameExtractor frameExtractor)
     {
         _logger = logger;
         _objectDetector = objectDetector;
+        _fileStorageService = fileStorageService;
         _frameExtractor = frameExtractor;
 
         _frameIntervalInSeconds = configuration.GetValue("UploadedVideoProcessor:FrameExtractionInterval",
@@ -72,13 +77,10 @@ public class UploadedVideoProcessor
 
             if (_shouldCleanupFrames)
             {
-                try
+                Result<bool> cleanupResult = _fileStorageService.DeleteDirectory(uploadedVideoFile.FrameDirectoryPath);
+                if (cleanupResult.IsFailure)
                 {
-                    Directory.Delete(uploadedVideoFile.FrameDirectoryPath, recursive: true);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to clean up frames, but processing completed successfully");
+                    _logger.LogWarning("Failed to clean up frames, but processing completed successfully: {ErrorMessage}", cleanupResult.ErrorMessage);
                 }
             }
 
@@ -185,55 +187,58 @@ public class UploadedVideoProcessor
     /// <summary>
     /// Detects objects in all extracted frames
     /// </summary>
-    /// <param name="frameInfoList">List of frame information</param>
+    /// <param name="frameInfos">List of frame information</param>
     /// <param name="progressCallback">Optional callback to report detailed progress</param>
     /// <returns>A Result containing list of frame detection results or an error message</returns>
     private async Task<Result<List<FrameDetectionResult>>> DetectObjectsInFramesAsync(
-        List<FrameInfo> frameInfoList,
+        List<FrameInfo> frameInfos,
         IProgress<VideoProcessingProgress> progressCallback)
     {
-        _logger.LogInformation("Phase 2: Detecting objects in {FrameCount} frames", frameInfoList.Count);
+        Debug.Assert(frameInfos.Count > 0, "Frame info list should not be empty");
+
+        _logger.LogInformation("Phase 2: Detecting objects in {FrameCount} frames", frameInfos.Count);
 
         List<FrameDetectionResult> frameResults = [];
         int processedFrames = 0;
 
-        foreach (FrameInfo frameInfo in frameInfoList)
+        foreach (FrameInfo frameInfo in frameInfos)
         {
-            await using (FileStream fileStream = new(frameInfo.FilePath, FileMode.Open, FileAccess.Read))
+            Result<byte[]> result = await _fileStorageService.ReadImageFileAsync(frameInfo.FilePath);
+            if (result.IsFailure)
             {
-                using (MemoryStream memoryStream = new())
-                {
-                    await fileStream.CopyToAsync(memoryStream);
-                    byte[] imageBytes = memoryStream.ToArray();
+                _logger.LogError("Failed to read frame image: {ErrorMessage}", result.ErrorMessage);
 
-                    using (Image<Rgba32> image = Image.Load<Rgba32>(imageBytes))
-                    {
-                        DetectionResult[] detectionResults = _objectDetector.Detect(imageBytes,
-                                                                                    image.Height,
-                                                                                    image.Width,
-                                                                                    _imageQuality);
-
-                        FrameDetectionResult frameResult = new()
-                                                           {
-                                                               FrameNumber = frameInfo.FrameNumber, Timestamp = frameInfo.Timestamp, FramePath = frameInfo.FilePath, Detections = detectionResults
-                                                           };
-
-                        frameResults.Add(frameResult);
-
-                        processedFrames++;
-
-                        double detectionProgress = (double)processedFrames / frameInfoList.Count;
-                        progressCallback?.Report(VideoProcessingProgress.CreateDetectionProgress(detectionProgress,
-                                                                                                 processedFrames,
-                                                                                                 totalFrames: frameInfoList.Count));
-
-                        _logger.LogDebug("Processed frame {FrameNumber} at {Timestamp}s. Found {Count} objects",
-                                         frameInfo.FrameNumber,
-                                         frameInfo.Timestamp.TotalSeconds,
-                                         detectionResults.Length);
-                    }
-                }
+                return Result<List<FrameDetectionResult>>.Failure($"Failed to read frame image: {result.ErrorMessage}");
             }
+
+            Debug.Assert(result.Value != null, "Image bytes should not be null when result is successful");
+
+            byte[] imageBytes = result.Value;
+
+            using Image<Rgba32> image = Image.Load<Rgba32>(imageBytes);
+            DetectionResult[] detectionResults = _objectDetector.Detect(imageBytes,
+                                                                        image.Height,
+                                                                        image.Width,
+                                                                        _imageQuality);
+
+            FrameDetectionResult frameResult = new()
+                                               {
+                                                   FrameNumber = frameInfo.FrameNumber, Timestamp = frameInfo.Timestamp, FramePath = frameInfo.FilePath, Detections = detectionResults
+                                               };
+
+            frameResults.Add(frameResult);
+
+            processedFrames++;
+
+            double detectionProgress = (double)processedFrames / frameInfos.Count;
+            progressCallback?.Report(VideoProcessingProgress.CreateDetectionProgress(detectionProgress,
+                                                                                     processedFrames,
+                                                                                     totalFrames: frameInfos.Count));
+
+            _logger.LogDebug("Processed frame {FrameNumber} at {Timestamp}s. Found {Count} objects",
+                             frameInfo.FrameNumber,
+                             frameInfo.Timestamp.TotalSeconds,
+                             detectionResults.Length);
         }
 
         _logger.LogInformation("Phase 2 complete: Detected objects in {ProcessedFrameCount} frames",
