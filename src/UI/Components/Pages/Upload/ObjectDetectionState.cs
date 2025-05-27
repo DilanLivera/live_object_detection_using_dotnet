@@ -152,11 +152,12 @@ public sealed class ObjectDetectionState
         DetectedObjects = result.DetectedObjects;
         FrameResults = result.FrameResults;
         TotalFrames = result.TotalFrames;
-        VideoDuration = result.ProcessedDuration;
+        VideoDuration = result.VideoDuration;
 
-        if (result.ProcessedDuration.TotalSeconds > 0 && result.TotalFrames > 0)
+        // todo: throw exception if total seconds = 0 || total frames == 0
+        if (result.VideoDuration.TotalSeconds > 0 && result.TotalFrames > 0)
         {
-            VideoFrameRate = result.TotalFrames / result.ProcessedDuration.TotalSeconds;
+            VideoFrameRate = result.TotalFrames / result.VideoDuration.TotalSeconds;
         }
 
         int objectCount = result.DetectedObjects.Sum(s => s.Count);

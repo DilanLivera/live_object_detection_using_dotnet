@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using UI.Infrastructure.FileStorage;
+using UI.Infrastructure;
 
 namespace UI.Components.Pages.Upload;
 
@@ -7,7 +7,7 @@ public static class VideoEndpoints
 {
     public static void MapVideoEndpoints(this WebApplication app)
         => app.MapGet(pattern: "/api/video/{filename}",
-                      (string filename, FileStorageService fileStorageService) =>
+                      (string filename, FileService fileService) =>
                       {
                           if (string.IsNullOrWhiteSpace(filename))
                           {
@@ -26,7 +26,7 @@ public static class VideoEndpoints
                                                      statusCode: StatusCodes.Status400BadRequest);
                           }
 
-                          Result<(FileStream Stream, string ContentType)> result = fileStorageService.GetFileStream(filename);
+                          Result<(FileStream Stream, string ContentType)> result = fileService.GetVideoAsStream(filename);
 
                           if (!result.IsSuccess)
                           {

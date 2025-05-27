@@ -2,10 +2,9 @@
 @rendermode InteractiveServer
 @inject ILogger<Upload> Logger
 @inject UploadedVideoProcessor UploadedVideoProcessor
-@inject FileStorageService FileStorageService
-@inject IJSRuntime JsRuntime
+@inject FileService FileService
 @using System.Diagnostics
-@using UI.Infrastructure.FileStorage
+@using UI.Infrastructure
 
 <div class="container mx-auto py-10 px-4">
     <div class="max-w-3xl mx-auto">
@@ -213,7 +212,6 @@
     private UploadedVideoFile? _videoFile;
     private readonly ObjectDetectionState _objectDetectionState = new();
 
-    private const long MaxFileSizeInBytes = 500 * 1024 * 1024; // 500 MB
     private const int MaxAllowedFiles = 1;
 
     private async Task UploadFileAsync(InputFileChangeEventArgs eventArgs)
@@ -238,14 +236,14 @@
 
         IBrowserFile file = eventArgs.File;
 
-        await UploadVideoAsync(file);
+        await UploadVideoAsync(browserFile, _videoFile);
 
-        await ProcessVideoAsync();
+        await ProcessVideoAsync(_videoFile);
     }
 
-    private async Task UploadVideoAsync(IBrowserFile file)
+    private async Task UploadVideoAsync(IBrowserFile browserFile, UploadedVideoFile videoFile)
     {
-        Result<string> result = await FileStorageService.SaveFileAsync(file, MaxFileSizeInBytes);
+        Result<string> result = await FileService.SaveFileAsync(browserFile);
 
         if (!result.IsSuccess)
         {
@@ -257,19 +255,20 @@
             return;
         }
 
-        _videoFile = new UploadedVideoFile(file.Name, file.Size, filePath: result.Value!);
+        Debug.Assert(result.Value != null, "result.Value != null");
+        videoFile.SetFilePath(result.Value);
 
-        _objectDetectionState.SetUploaded(_videoFile.Name);
+        _objectDetectionState.SetUploaded(videoFile.OriginalFileName);
         StateHasChanged();
 
-        Logger.LogInformation("Video file saved to {FilePath}", _videoFile.FilePath);
+        Logger.LogInformation("Video file saved to {FilePath}", videoFile.FilePath);
     }
 
-    private async Task ProcessVideoAsync()
+    private async Task ProcessVideoAsync(UploadedVideoFile videoFile)
     {
         Progress<VideoProcessingProgress> progressHandler = new(HandleProcessingProgress);
 
-        Result<VideoProcessingResult> result = await UploadedVideoProcessor.ProcessVideoAsync(_videoFile!,
+        Result<VideoProcessingResult> result = await UploadedVideoProcessor.ProcessVideoAsync(videoFile,
                                                                                               progressCallback: progressHandler);
 
         if (!result.IsSuccess)

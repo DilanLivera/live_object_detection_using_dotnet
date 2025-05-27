@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using UI.Components.Pages.Upload;
 using Xabe.FFmpeg;
 
 namespace UI.Infrastructure.VideoProcessing;
@@ -9,6 +10,7 @@ namespace UI.Infrastructure.VideoProcessing;
 public sealed class FFmpegFrameExtractor
 {
     private readonly ILogger<FFmpegFrameExtractor> _logger;
+    private readonly double _frameIntervalInSeconds;
 
     public FFmpegFrameExtractor(ILogger<FFmpegFrameExtractor> logger, IConfiguration configuration)
     {
@@ -20,44 +22,101 @@ public sealed class FFmpegFrameExtractor
         {
             FFmpeg.SetExecutablesPath(ffmpegPath);
         }
+
+        _frameIntervalInSeconds = configuration.GetValue("UploadedVideoProcessor:FrameExtractionInterval",
+                                                         defaultValue: 1.0);
     }
 
     /// <summary>
-    /// Extracts a single frame from a video file at the specified timestamp
+    /// Extracts all frames from the video at specified intervals
     /// </summary>
-    /// <param name="videoPath">Path to the video file to extract frame from</param>
-    /// <param name="outputPath">Path where the extracted frame should be saved</param>
-    /// <param name="timestamp">Timestamp in the video to extract the frame from</param>
-    /// <returns>A Result containing the output path on success or an error message on failure</returns>
-    public async Task<Result<string>> ExtractFrameAsync(string videoPath, string outputPath, TimeSpan timestamp)
+    /// <param name="uploadedVideoFile">The uploaded video file containing metadata and file paths</param>
+    /// <param name="progressCallback">Optional callback to report video processing progress</param>
+    /// <returns>A Result containing tuple of frame information and video duration or an error message</returns>
+    public async Task<Result<(List<Frame> Frames, TimeSpan VideoDuration)>> ExtractFramesAsync(
+        UploadedVideoFile uploadedVideoFile,
+        IProgress<VideoProcessingProgress> progressCallback)
     {
-        Debug.Assert(!string.IsNullOrWhiteSpace(videoPath), "Video path cannot be null or empty");
-        Debug.Assert(!string.IsNullOrWhiteSpace(outputPath), "Output path cannot be null or empty");
-        Debug.Assert(File.Exists(videoPath), $"Video file does not exist: {videoPath}");
+        _logger.LogInformation("Extracting frames from video '{FileName}'", uploadedVideoFile.OriginalFileName);
 
-        try
+        Debug.Assert(File.Exists(uploadedVideoFile.FilePath), "File must exist");
+
+        IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(uploadedVideoFile.FilePath);
+        IVideoStream videoStream = mediaInfo.VideoStreams.First();
+        TimeSpan videoDuration = videoStream.Duration;
+
+        int totalFramesToExtract = (int)Math.Ceiling(videoDuration.TotalSeconds / _frameIntervalInSeconds);
+
+        _logger.LogInformation("Extract {FrameCount} frames(approximately) at {Interval}s intervals",
+                               totalFramesToExtract,
+                               _frameIntervalInSeconds);
+
+        List<Frame> frames = [];
+        int frameCounter = 0;
+
+        string framesDirectory = uploadedVideoFile.FramesDirectoryPath;
+        for (double seconds = 0; seconds < videoDuration.TotalSeconds; seconds += _frameIntervalInSeconds)
         {
-            _logger.LogDebug("Extracting frame at {Timestamp} from video {VideoPath} to {OutputPath}",
-                             timestamp,
-                             videoPath,
-                             outputPath);
+            TimeSpan timestamp = TimeSpan.FromSeconds(seconds);
+            string outputPath = Path.Combine(framesDirectory, $"frame_{frameCounter:D6}.jpg");
 
-            IConversion? conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(inputPath: videoPath,
+            IConversion? conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(inputPath: uploadedVideoFile.FilePath,
                                                                                     outputPath,
                                                                                     captureTime: timestamp);
 
-            await conversion.Start();
+            try
+            {
+                await conversion.Start();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                                 "Error extracting frame at {Timestamp} from video {SavedFileName}",
+                                 timestamp,
+                                 uploadedVideoFile.SavedFileName);
 
-            return Result<string>.Success(outputPath);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                             "Error extracting frame at {Timestamp} from video {VideoPath}",
-                             timestamp,
-                             videoPath);
+                return Result<(List<Frame> Frames, TimeSpan VideoDuration)>.Failure($"Failed to extract frame: {ex.Message}");
+            }
 
-            return Result<string>.Failure($"Failed to extract frame: {ex.Message}");
+            frames.Add(new Frame
+                       {
+                           Number = frameCounter, Timestamp = timestamp, ImageFilePath = outputPath
+                       });
+
+            frameCounter++;
+
+            double extractionProgress = (double)frameCounter / totalFramesToExtract;
+            VideoProcessingProgress progress = VideoProcessingProgress.CreateExtractionProgress(extractionProgress,
+                                                                                                currentFrame: frameCounter,
+                                                                                                totalFramesToExtract);
+            progressCallback.Report(progress);
+
+            _logger.LogDebug("Extracted frame {FrameNumber} at {Timestamp}s", frameCounter, seconds);
         }
+
+        _logger.LogInformation("Extracting framesÒ complete: Extracted {ActualFrameCount} frames", frames.Count);
+
+        return Result<(List<Frame>, TimeSpan)>.Success((frames, videoDuration));
     }
+}
+
+/// <summary>
+/// Represents information about an extracted video frame
+/// </summary>
+public sealed class Frame
+{
+    /// <summary>
+    /// Sequential frame number
+    /// </summary>
+    public int Number { get; init; }
+
+    /// <summary>
+    /// Timestamp of the frame in the video
+    /// </summary>
+    public TimeSpan Timestamp { get; init; }
+
+    /// <summary>
+    /// Path to the extracted frame file
+    /// </summary>
+    public string ImageFilePath { get; init; } = "";
 }
