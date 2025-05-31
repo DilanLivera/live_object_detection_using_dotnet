@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 
 # Onnx models
 *.onnx
+
+# where uploaded files are stored
+src/UI/uploads

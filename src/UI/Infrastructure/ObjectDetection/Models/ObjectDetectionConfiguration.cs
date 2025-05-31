@@ -1,8 +1,8 @@
 using System.Text;
 using Microsoft.Extensions.Options;
-using UI.Infrastructure.Models.TinyYoloV3;
+using UI.Infrastructure.ObjectDetection.Models.TinyYoloV3;
 
-namespace UI.Infrastructure.Models;
+namespace UI.Infrastructure.ObjectDetection.Models;
 
 /// <summary>
 /// Configurations for configuring object detection models.

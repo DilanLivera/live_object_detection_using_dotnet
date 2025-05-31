@@ -6,7 +6,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-namespace UI.Infrastructure.Models.TinyYoloV3;
+namespace UI.Infrastructure.ObjectDetection.Models.TinyYoloV3;
 
 /// <summary>
 /// Implementation of the Tiny YOLOv3 object detection model.

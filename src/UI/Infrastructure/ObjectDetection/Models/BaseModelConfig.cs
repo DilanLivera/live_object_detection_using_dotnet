@@ -1,4 +1,4 @@
-namespace UI.Infrastructure.Models;
+namespace UI.Infrastructure.ObjectDetection.Models;
 
 /// <summary>
 /// Base configuration for object detection models.
