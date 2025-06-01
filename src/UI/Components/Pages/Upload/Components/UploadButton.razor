@@ -1,0 +1,62 @@
+<div class="mt-6 flex items-center">
+    <label for="videoUpload"
+           class="inline-flex items-center px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors cursor-pointer">
+        <svg class="w-4 h-4 mr-2"
+             aria-hidden="true"
+             xmlns="http://www.w3.org/2000/svg"
+             fill="none"
+             viewBox="0 0 24 24"
+             stroke="currentColor">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/>
+        </svg>
+        Select Video
+        <InputFile id="videoUpload"
+                   class="hidden"
+                   accept=".mp4"
+                   OnChange="@OnFileSelected"
+                   disabled="@IsDisabled"/>
+    </label>
+    @if (VideoFile != null && !HasFailed)
+    {
+        <span class="ml-3 text-gray-400">
+            @VideoFile.OriginalFileName (@Math.Round((double)VideoFile.SizeInBytes / (1024 * 1024), 1) MB) @(VideoDuration != null ? $@"- {VideoDuration.Value:hh\:mm\:ss}" : "")
+        </span>
+    }
+</div>
+
+@code {
+
+    /// <summary>
+    /// The currently selected video file
+    /// </summary>
+    [Parameter]
+    public UploadedVideoFile? VideoFile { get; set; }
+
+    /// <summary>
+    /// Duration of the video if available
+    /// </summary>
+    [Parameter]
+    public TimeSpan? VideoDuration { get; set; }
+
+    /// <summary>
+    /// Whether the input should be disabled
+    /// </summary>
+    [Parameter]
+    public bool IsDisabled { get; set; }
+
+    /// <summary>
+    /// Indicates if the upload has failed
+    /// </summary>
+    [Parameter]
+    public bool HasFailed { get; set; }
+
+    /// <summary>
+    /// Callback event fired when a file is selected
+    /// </summary>
+    [Parameter]
+    public EventCallback<InputFileChangeEventArgs> OnFileSelected { get; set; }
+
+}

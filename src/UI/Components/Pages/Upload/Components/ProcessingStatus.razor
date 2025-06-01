@@ -1,0 +1,43 @@
+@if (StatusMessages.Count > 0)
+{
+    <div class="mt-6 space-y-4">
+        @foreach (StatusMessage message in StatusMessages)
+        {
+            <div class="p-4 @message.CssClass rounded-lg">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        @if (message.ShouldShowSpinner)
+                        {
+                            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-grey-500"></div>
+                        }
+                        <span class="@message.TextClass">@message.Text</span>
+                    </div>
+                    <span class="text-xs text-gray-500">
+                        @message.CreatedAt.ToString(format: "HH:mm:ss")
+                    </span>
+                </div>
+                @if (message.ShouldShowProgress && message.Progress > 0)
+                {
+                    <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                        <div class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
+                             style="width: @(message.Progress * 100)%">
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(message.Details))
+                {
+                    <div class="mt-2 text-sm @message.TextClass opacity-80">
+                        @message.Details
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+
+    [Parameter]
+    public IReadOnlyList<StatusMessage> StatusMessages { get; set; } = new List<StatusMessage>();
+
+}

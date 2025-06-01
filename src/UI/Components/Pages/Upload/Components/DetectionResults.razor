@@ -1,0 +1,131 @@
+@using UI.Infrastructure.ObjectDetection.Models
+
+@if (IsProcessed && FrameResults.Any())
+{
+    <div class="mt-6 p-4">
+        <div class="space-y-4">
+            <p class="font-medium">
+                Video processing complete: Found @AllDetections.Count() total detections across @TotalFrames frames (@Math.Round(VideoFrameRate, digits: 0) fps).
+            </p>
+
+            @if (AllDetections.Any())
+            {
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <h3 class="font-medium">
+                            Detection Summary:
+                        </h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            @foreach (DetectionSummaryInfo summary in DetectionSummary)
+                            {
+                                <div class="p-2 bg-gray-800/20 border border-gray-600/20 rounded">
+                                    <div class="flex justify-between">
+                                        <span class="text-blue-300">
+                                            @summary.Label
+                                        </span>
+                                        <span class="text-sm text-gray-400">
+                                            @summary.Count detections (max: @Math.Round(summary.MaxConfidence * 100, 1)%)
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h3 class="font-medium">
+                            Detections per frame:
+                        </h3>
+                        <div class="max-h-96 overflow-y-auto space-y-2">
+                            @foreach (IGrouping<int, DetectionInfo> frameGroup in FrameGroups)
+                            {
+                                <div class="p-3 bg-gray-800/30 border border-gray-600/30 rounded-lg">
+                                    <div class="mb-2 pb-2 border-b border-gray-600/30">
+                                        <span class="font-medium text-gray-300">
+                                            Frame @frameGroup.Key (@frameGroup.First().Timestamp.ToString(@"mm\:ss\.ff"))
+                                        </span>
+                                        <span class="ml-2 text-sm text-gray-400">
+                                            @frameGroup.Count() detection@(frameGroup.Count() == 1 ? "" : "s")
+                                        </span>
+                                    </div>
+                                    <div class="space-y-1">
+                                        @foreach (DetectionInfo detection in frameGroup.OrderByDescending(d => d.Detection.Confidence))
+                                        {
+                                            <div class="flex items-center justify-between">
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="font-medium text-blue-300">
+                                                        @detection.Detection.Label
+                                                    </span>
+                                                    <span class="text-xs text-gray-500">
+                                                        x: @Math.Round(detection.Detection.BoundingBox.X, 0), y: @Math.Round(detection.Detection.BoundingBox.Y, 0), w: @Math.Round(detection.Detection.BoundingBox.Width, 0), h: @Math.Round(detection.Detection.BoundingBox.Height, 0)
+                                                    </span>
+                                                </div>
+                                                <span class="text-sm font-medium text-green-300">
+                                                    @Math.Round(detection.Detection.Confidence * 100, 1)%
+                                                </span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+
+    /// <summary>
+    /// Indicates whether video processing has completed successfully
+    /// </summary>
+    [Parameter]
+    public bool IsProcessed { get; set; }
+
+    /// <summary>
+    /// Frame-by-frame detection results from video processing
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<FrameDetectionResult> FrameResults { get; set; } = [];
+
+    /// <summary>
+    /// Total number of processed frames
+    /// </summary>
+    [Parameter]
+    public int TotalFrames { get; set; }
+
+    /// <summary>
+    /// Video frame rate
+    /// </summary>
+    [Parameter]
+    public double VideoFrameRate { get; set; }
+
+    private record DetectionInfo(int FrameNumber, TimeSpan Timestamp, DetectionResult Detection);
+
+    private record DetectionSummaryInfo(string Label, int Count, float MaxConfidence);
+
+    /// <summary>
+    /// Flattened collection of all detections across all frames
+    /// </summary>
+    private DetectionInfo[] AllDetections => FrameResults.SelectMany(frame => frame.Detections
+                                                                                   .Select(detection => new DetectionInfo(frame.FrameNumber, frame.Timestamp, detection)))
+                                                         .ToArray();
+
+    /// <summary>
+    /// Summary statistics grouped by object label
+    /// </summary>
+    private DetectionSummaryInfo[] DetectionSummary => AllDetections.GroupBy(x => x.Detection.Label)
+                                                                    .Select(g => new DetectionSummaryInfo(g.Key, g.Count(), g.Max(x => x.Detection.Confidence)))
+                                                                    .OrderByDescending(x => x.Count)
+                                                                    .ToArray();
+
+    /// <summary>
+    /// Detections organized by frame number for detailed frame-by-frame display
+    /// </summary>
+    private IGrouping<int, DetectionInfo>[] FrameGroups => AllDetections.GroupBy(x => x.FrameNumber)
+                                                                        .OrderBy(g => g.Key)
+                                                                        .ToArray();
+
+}
