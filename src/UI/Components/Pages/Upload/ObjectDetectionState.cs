@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace UI.Components.Pages.Upload;
 
 /// <summary>
@@ -11,16 +9,6 @@ public sealed class ObjectDetectionState
     /// Current status of the video upload and object detection
     /// </summary>
     public ObjectDetectionStatus Status { get; private set; } = ObjectDetectionStatus.None;
-
-    /// <summary>
-    /// Current processing progress (0-1)
-    /// </summary>
-    public double ProcessingProgress { get; private set; }
-
-    /// <summary>
-    /// Error message if any occurred during upload or processing
-    /// </summary>
-    public string? ErrorMessage { get; private set; }
 
     /// <summary>
     /// Dictionary of status messages for this operation
@@ -58,8 +46,6 @@ public sealed class ObjectDetectionState
     public void Reset()
     {
         Status = ObjectDetectionStatus.None;
-        ProcessingProgress = 0;
-        ErrorMessage = null;
         StatusMessages.Clear();
         DetectedObjects = [];
         FrameResults = [];
@@ -74,110 +60,63 @@ public sealed class ObjectDetectionState
     public void SetUploading()
     {
         Status = ObjectDetectionStatus.Uploading;
-
-        StatusMessages.AddMessage(ObjectDetectionStatus.Uploading,
-                                  new StatusMessage(text: "Uploading video...",
-                                                    cssClass: "bg-gray-900/50 border border-gray-500/50",
-                                                    textClass: "text-gray-300",
-                                                    shouldShowSpinner: true));
+        StatusMessages.AddUploadStarted();
     }
 
     /// <summary>
     /// Sets the state to uploaded
     /// </summary>
-    /// <param name="videoName">Name of the uploaded video</param>
-    public void SetUploaded(string videoName)
+    /// <param name="fileName">Original name of the uploaded video</param>
+    public void SetUploaded(string fileName)
     {
         Status = ObjectDetectionStatus.Uploaded;
-
-        StatusMessages.StopMessageSpinner(ObjectDetectionStatus.Uploading);
-        StatusMessages.AddMessage(ObjectDetectionStatus.Uploaded,
-                                  new StatusMessage(text: $"Video uploaded successfully: {videoName}",
-                                                    cssClass: "bg-green-900/50 border border-green-500/50",
-                                                    textClass: "text-green-200"));
+        StatusMessages.AddUploadComplete(fileName);
     }
 
     /// <summary>
-    /// Updates the processing progress
+    /// Updates the frame extraction progress
     /// </summary>
-    /// <param name="progress">Video processing progress</param>
-    public void UpdateProcessingProgress(VideoProcessingProgress progress)
+    /// <param name="currentFrame">Current frame being processed</param>
+    /// <param name="totalFrames">Total frames to process</param>
+    public void UpdateFrameExtractionProgress(int currentFrame, int totalFrames)
     {
-        ProcessingProgress = progress.OverallProgress;
-
-        switch (progress.CurrentPhase)
-        {
-            case VideoProcessingPhase.ExtractingFrames:
-                StatusMessages.AddMessage(ObjectDetectionStatus.ExtractingFrames,
-                                          new StatusMessage(text: progress.StatusMessage,
-                                                            cssClass: "bg-gray-900/50 border border-gray-500/50",
-                                                            textClass: "text-gray-300",
-                                                            shouldShowSpinner: true,
-                                                            shouldShowProgress: true,
-                                                            progress: progress.FrameExtractionProgress,
-                                                            details: progress.Details));
-
-                break;
-
-            case VideoProcessingPhase.DetectingObjects:
-                StatusMessages.StopMessageSpinner(ObjectDetectionStatus.ExtractingFrames);
-
-                StatusMessages.AddMessage(ObjectDetectionStatus.DetectingObjects,
-                                          new StatusMessage(text: progress.StatusMessage,
-                                                            cssClass: "bg-gray-900/50 border border-gray-500/50",
-                                                            textClass: "text-gray-300",
-                                                            shouldShowSpinner: true,
-                                                            shouldShowProgress: true,
-                                                            progress: progress.ObjectDetectionProgress,
-                                                            details: progress.Details));
-
-                break;
-
-            case VideoProcessingPhase.Complete:
-                StatusMessages.StopMessageSpinner(ObjectDetectionStatus.DetectingObjects);
-
-                break;
-        }
+        Status = ObjectDetectionStatus.ExtractingFrames;
+        StatusMessages.UpdateFrameExtractionProgress(currentFrame, totalFrames);
     }
 
     /// <summary>
-    /// Sets the state to processed with results
+    /// Updates the object detection progress
     /// </summary>
-    /// <param name="result">Processing results</param>
-    public void SetProcessed(VideoProcessingResult result)
+    /// <param name="processedFrames">Number of frames processed</param>
+    /// <param name="totalFrames">Total frames to process</param>
+    public void UpdateObjectDetectionProgress(int processedFrames, int totalFrames)
     {
-        Debug.Assert(result.CompletedAt > result.UploadedAt, "Processing completion time should be after upload time");
-
-        Status = ObjectDetectionStatus.Processed;
-        DetectedObjects = result.DetectedObjects;
-        FrameResults = result.FrameResults;
-        TotalFrames = result.TotalFrames;
-        VideoDuration = result.VideoDuration;
-
-        // todo: throw exception if total seconds = 0 || total frames == 0
-        if (result.VideoDuration.TotalSeconds > 0 && result.TotalFrames > 0)
-        {
-            VideoFrameRate = result.TotalFrames / result.VideoDuration.TotalSeconds;
-        }
-
-        int objectCount = result.DetectedObjects.Sum(s => s.Count);
-        StatusMessages.AddMessage(ObjectDetectionStatus.Processed,
-                                  new StatusMessage(text: $"Object detection complete: Found {objectCount} objects across {result.TotalFrames} frames.",
-                                                    cssClass: "bg-green-900/50 border border-green-500/50",
-                                                    textClass: "text-green-200"));
+        Status = ObjectDetectionStatus.DetectingObjects;
+        StatusMessages.UpdateObjectDetectionProgress(processedFrames, totalFrames);
     }
 
     /// <summary>
-    /// Sets the state to failed with an error message
+    /// Sets the state to complete with the processed video file
+    /// </summary>
+    public void SetComplete()
+    {
+        Status = ObjectDetectionStatus.Complete;
+        ProcessingProgress = 1.0;
+        DetectedObjects = videoFile.DetectedObjects;
+        FrameResults = videoFile.FrameResults;
+        TotalFrames = videoFile.TotalFrames;
+        VideoDuration = videoFile.Duration;
+        VideoFrameRate = videoFile.FrameRate;
+        StatusMessages.AddProcessingComplete();
+    }
+
+    /// <summary>
+    /// Sets the state to failed
     /// </summary>
     /// <param name="errorMessage">Error message</param>
     public void SetFailed(string errorMessage)
     {
         Status = ObjectDetectionStatus.Failed;
-        ErrorMessage = errorMessage;
-        StatusMessages.AddMessage(ObjectDetectionStatus.Failed,
-                                  new StatusMessage(text: errorMessage,
-                                                    cssClass: "bg-red-900/50 border border-red-500/50",
-                                                    textClass: "text-red-200"));
+        StatusMessages.AddError(errorMessage);
     }
 }

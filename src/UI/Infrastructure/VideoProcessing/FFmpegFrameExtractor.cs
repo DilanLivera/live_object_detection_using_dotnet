@@ -32,7 +32,7 @@ public sealed class FFmpegFrameExtractor
     /// </summary>
     /// <param name="uploadedVideoFile">The uploaded video file containing metadata and file paths</param>
     /// <param name="progressCallback">Optional callback to report video processing progress</param>
-    /// <returns>A Result containing tuple of frame information and video duration or an error message</returns>
+    /// <returns>A Result containing frame information and video duration or an error message</returns>
     public async Task<Result<(List<Frame> Frames, TimeSpan VideoDuration)>> ExtractFramesAsync(
         UploadedVideoFile uploadedVideoFile,
         IProgress<VideoProcessingProgress> progressCallback)
@@ -86,15 +86,14 @@ public sealed class FFmpegFrameExtractor
             frameCounter++;
 
             double extractionProgress = (double)frameCounter / totalFramesToExtract;
-            VideoProcessingProgress progress = VideoProcessingProgress.CreateExtractionProgress(extractionProgress,
-                                                                                                currentFrame: frameCounter,
-                                                                                                totalFramesToExtract);
-            progressCallback.Report(progress);
+            progressCallback.Report(VideoProcessingProgress.CreateExtractionProgress(progress: new Progress(extractionProgress),
+                                                                                     currentFrame: frameCounter,
+                                                                                     totalFrames: totalFramesToExtract));
 
             _logger.LogDebug("Extracted frame {FrameNumber} at {Timestamp}s", frameCounter, seconds);
         }
 
-        _logger.LogInformation("Extracting framesÒ complete: Extracted {ActualFrameCount} frames", frames.Count);
+        _logger.LogInformation("Extracting frames complete: Extracted {ActualFrameCount} frames", frames.Count);
 
         return Result<(List<Frame>, TimeSpan)>.Success((frames, videoDuration));
     }
@@ -106,7 +105,7 @@ public sealed class FFmpegFrameExtractor
 public sealed class Frame
 {
     /// <summary>
-    /// Sequential frame number
+    /// Frame number
     /// </summary>
     public int Number { get; init; }
 

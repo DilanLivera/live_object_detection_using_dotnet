@@ -1,10 +1,7 @@
 @page "/upload"
 @rendermode InteractiveServer
 @inject ILogger<Upload> Logger
-@inject UploadedVideoProcessor UploadedVideoProcessor
-@inject FileService FileService
-@using System.Diagnostics
-@using UI.Infrastructure
+@inject VideoUploadOrchestrator UploadOrchestrator
 @using UI.Components.Pages.Upload.Components
 
 <div class="container mx-auto py-5 px-4">
@@ -18,20 +15,21 @@
             </p>
         </div>
 
-        <UploadButton VideoFile="_videoFile"
-                      VideoDuration="_objectDetectionState.VideoDuration"
-                      IsDisabled="ShouldDisableInput()"
+        <UploadButton OriginalFileName="@_videoFile?.OriginalFileName"
+                      SizeInBytes="@_videoFile?.SizeInBytes"
+                      VideoDuration="_videoFile?.Duration"
+                      ShouldDisable="IsObjectDetectionInProgress()"
                       HasFailed="_objectDetectionState.Status == ObjectDetectionStatus.Failed"
-                      OnFileSelected="UploadFileAsync"/>
+                      OnFileSelected="ProcessVideoUploadAsync"/>
 
         <ProcessingStatus StatusMessages="_objectDetectionState.StatusMessages.Value"/>
 
-        <DetectionResults IsProcessed="_objectDetectionState.Status == ObjectDetectionStatus.Processed"
-                          FrameResults="_objectDetectionState.FrameResults"
-                          TotalFrames="_objectDetectionState.TotalFrames"
-                          VideoFrameRate="_objectDetectionState.VideoFrameRate"/>
+        <DetectionResults IsProcessed="IsProcessed"
+                          VideoFrames="_videoFile?.VideoFrames.AsReadOnly()"
+                          TotalFrames="_videoFile?.TotalFrames ?? 0"
+                          VideoFrameRate="_videoFile?.FrameRate ?? 0"/>
 
-        <VideoPlayer IsProcessed="_objectDetectionState.Status == ObjectDetectionStatus.Processed"
+        <VideoPlayer IsProcessed="IsProcessed"
                      VideoUrl="@GetVideoUrl()"/>
     </div>
 </div>
@@ -40,104 +38,90 @@
     private UploadedVideoFile? _videoFile;
     private readonly ObjectDetectionState _objectDetectionState = new();
 
-    private const int MaxAllowedFiles = 1;
-
-    private async Task UploadFileAsync(InputFileChangeEventArgs eventArgs)
+    /// <summary>
+    /// Handles the complete video upload and processing workflow, including object detection.
+    /// </summary>
+    /// <param name="eventArgs">Event arguments containing the selected video file information</param>
+    /// <returns>A task representing the asynchronous operation</returns>
+    private async Task ProcessVideoUploadAsync(InputFileChangeEventArgs eventArgs)
     {
         _objectDetectionState.Reset();
         _videoFile = null;
-        StateHasChanged();
 
         _objectDetectionState.SetUploading();
         StateHasChanged();
 
-        switch (eventArgs.FileCount)
-        {
-            case 0:
-                return;
-            case > MaxAllowedFiles:
-                _objectDetectionState.SetFailed(errorMessage: "Please select only one video file.");
-                StateHasChanged();
+        Progress<VideoProcessingProgress> progressHandler = new(HandleVideoProcessingProgress);
 
-                return;
-        }
-
-        IBrowserFile browserFile = eventArgs.File;
-        _videoFile = new UploadedVideoFile(browserFile.Name, browserFile.Size);
-
-        // todo: show error to user when file is not video file
-        // $"File type is not supported. Allowed types: {string.Join(", ", UploadedVideoFile.SupportedExtensions}"
-        bool isVideoFile = _videoFile.IsVideoFile();
-        // todo: show error to user when file size is 0
-        // $"File size ({fileSizeMb:F1} MB) exceeds maximum allowed size ({UploadedVideoFile.MaxFileSizeInBytes:F1} MB)"
-        bool isEmptyFile = _videoFile.IsFileEmpty();
-
-        await UploadVideoAsync(browserFile, _videoFile);
-
-        await ProcessVideoAsync(_videoFile);
-    }
-
-    private async Task UploadVideoAsync(IBrowserFile browserFile, UploadedVideoFile videoFile)
-    {
-        Result<string> result = await FileService.SaveFileAsync(browserFile);
+        Result<UploadedVideoFile> result = await UploadOrchestrator.ProcessUploadAsync(eventArgs, progressHandler);
 
         if (!result.IsSuccess)
         {
-            Logger.LogWarning("File upload failed: {ErrorMessage}", result.ErrorMessage);
-
-            _objectDetectionState.SetFailed(errorMessage: $"Error saving file: {result.ErrorMessage}");
+            Logger.LogWarning("Upload failed: {ErrorMessage}", result.ErrorMessage);
+            _objectDetectionState.SetFailed(result.ErrorMessage!);
             StateHasChanged();
 
             return;
         }
 
-        Debug.Assert(result.Value != null, "result.Value != null");
-        videoFile.SetFilePath(result.Value);
-
-        _objectDetectionState.SetUploaded(videoFile.OriginalFileName);
-        StateHasChanged();
-
-        Logger.LogInformation("Video file saved to {FilePath}", videoFile.FilePath);
+        _videoFile = result.Value;
     }
 
-    private async Task ProcessVideoAsync(UploadedVideoFile videoFile)
+    /// <summary>
+    /// Handles real-time progress updates from video processing.
+    /// </summary>
+    /// <param name="progress">Progress information containing the current status, frame counts, and completion state</param>
+    private void HandleVideoProcessingProgress(VideoProcessingProgress progress)
     {
-        Progress<VideoProcessingProgress> progressHandler = new(HandleProcessingProgress);
-
-        Result<VideoProcessingResult> result = await UploadedVideoProcessor.ProcessVideoAsync(videoFile,
-                                                                                              progressCallback: progressHandler);
-
-        if (!result.IsSuccess)
+        switch (progress.Status)
         {
-            Logger.LogWarning("Video processing failed: {ErrorMessage}", result.ErrorMessage);
+            case ObjectDetectionStatus.Uploaded:
+                _objectDetectionState.SetUploaded(progress.FileName!);
 
-            _objectDetectionState.SetFailed(errorMessage: $"Error processing video: {result.ErrorMessage}");
-            StateHasChanged();
+                break;
 
-            return;
+            case ObjectDetectionStatus.ExtractingFrames:
+                _objectDetectionState.UpdateFrameExtractionProgress(progress.CurrentFrame,
+                                                                    progress.TotalFrames);
+
+                break;
+
+            case ObjectDetectionStatus.DetectingObjects:
+                _objectDetectionState.UpdateObjectDetectionProgress(processedFrames: progress.CurrentFrame,
+                                                                    progress.TotalFrames);
+
+                break;
+
+            case ObjectDetectionStatus.Complete:
+                _objectDetectionState.SetComplete();
+
+                break;
         }
 
-        Debug.Assert(_videoFile is not null, "_videoFile is null");
-        _videoFile.MarkAsProcessed();
-
-        _objectDetectionState.SetProcessed(result.Value!);
         StateHasChanged();
     }
 
-    private void HandleProcessingProgress(VideoProcessingProgress progress)
-    {
-        _objectDetectionState.UpdateProcessingProgress(progress);
-        StateHasChanged();
-    }
-
-    private bool ShouldDisableInput() => _objectDetectionState.Status is not (ObjectDetectionStatus.None or
-        ObjectDetectionStatus.Processed or
+    /// <summary>
+    /// Determines if object detection is in progress.
+    /// </summary>
+    /// <returns>True if object detection is currently in progress, false otherwise</returns>
+    private bool IsObjectDetectionInProgress() => _objectDetectionState.Status is not (
+        ObjectDetectionStatus.None or
+        ObjectDetectionStatus.Complete or
         ObjectDetectionStatus.Failed);
 
+    /// <summary>
+    /// Indicates whether the object detection is complete.
+    /// </summary>
+    private bool IsProcessed => _objectDetectionState.Status == ObjectDetectionStatus.Complete;
+
+    /// <summary>
+    /// Generates the video URL for playback after processing is complete.
+    /// </summary>
+    /// <returns>The URL to the processed video file, or an empty string if no file is available</returns>
     private string GetVideoUrl()
     {
-        if (_videoFile == null || string.IsNullOrWhiteSpace(_videoFile.SavedFileName))
-            return string.Empty;
+        if (_videoFile == null || string.IsNullOrWhiteSpace(_videoFile.SavedFileName)) return string.Empty;
 
         return $"/api/video/{Uri.EscapeDataString(_videoFile.SavedFileName)}";
     }

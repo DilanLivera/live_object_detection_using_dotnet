@@ -1,16 +1,17 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Components.Forms;
-using UI.Components.Pages.Upload;
 
 namespace UI.Infrastructure;
 
 /// <summary>
-/// Defines the file storage operations.
+/// Service for managing file operations such as saving uploaded files, retrieving video streams, and cleanup.
 /// </summary>
 public class FileService
 {
     private readonly ILogger<FileService> _logger;
     private readonly string _uploadsPath;
+
+    private const long MaxFileSizeInBytes = 500 * 1024 * 1024; // 500 MB
 
     /// <summary>
     /// Initializes a new instance of the FileStorageService.
@@ -38,7 +39,7 @@ public class FileService
         IBrowserFile file,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull("File cannot be null");
+        ArgumentNullException.ThrowIfNull(file, nameof(file));
 
         string extension = Path.GetExtension(file.Name).ToLowerInvariant();
         string tempFileName = Path.GetRandomFileName() + extension;
@@ -53,8 +54,7 @@ public class FileService
         {
 
             await using FileStream fileStream = new(filePath, FileMode.Create, FileAccess.Write);
-            await using Stream uploadStream = file.OpenReadStream(UploadedVideoFile.MaxFileSizeInBytes,
-                                                                  cancellationToken);
+            await using Stream uploadStream = file.OpenReadStream(MaxFileSizeInBytes, cancellationToken);
 
             await uploadStream.CopyToAsync(fileStream, cancellationToken);
             await fileStream.FlushAsync(cancellationToken);
@@ -215,12 +215,11 @@ public class FileService
         try
         {
             DateTime cutoffTime = DateTime.UtcNow - maxAge;
-            int deletedFiles = 0;
-
             string[] files = Directory.GetFiles(_uploadsPath,
                                                 searchPattern: "*.*",
                                                 SearchOption.TopDirectoryOnly);
 
+            int deletedFiles = 0;
             foreach (string filePath in files)
             {
                 FileInfo fileInfo = new(filePath);

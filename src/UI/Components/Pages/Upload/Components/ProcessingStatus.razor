@@ -16,11 +16,11 @@
                         @message.CreatedAt.ToString(format: "HH:mm:ss")
                     </span>
                 </div>
-                @if (message.ShouldShowProgress && message.Progress > 0)
+                @if (message.ShouldShowProgress && message.Progress.Value > 0)
                 {
                     <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2">
                         <div class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
-                             style="width: @(message.Progress * 100)%">
+                             style="width: @(message.Progress.AsPercentage())%">
                         </div>
                     </div>
                 }
@@ -37,7 +37,10 @@
 
 @code {
 
+    /// <summary>
+    /// Collection of status messages to display.
+    /// </summary>
     [Parameter]
-    public IReadOnlyList<StatusMessage> StatusMessages { get; set; } = new List<StatusMessage>();
+    public IReadOnlyList<StatusMessage> StatusMessages { get; set; } = [];
 
 }

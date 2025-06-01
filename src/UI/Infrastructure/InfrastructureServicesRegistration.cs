@@ -35,7 +35,6 @@ public static class InfrastructureServicesRegistration
 
         services.AddHostedService<FileCleanupService>();
 
-
         return services;
     }
 
