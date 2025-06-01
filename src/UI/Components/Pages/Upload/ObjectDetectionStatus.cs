@@ -14,17 +14,14 @@ public enum ObjectDetectionStatus
     /// <summary>File is uploaded successfully</summary>
     Uploaded,
 
-    /// <summary>Video is being processed for object detection</summary>
-    Processing,
-
     /// <summary>Video frames are being extracted</summary>
     ExtractingFrames,
 
     /// <summary>Objects are being detected in extracted frames</summary>
     DetectingObjects,
 
-    /// <summary>Video has been processed successfully</summary>
-    Processed,
+    /// <summary>Object detection completed successfully</summary>
+    Complete,
 
     /// <summary>An error occurred</summary>
     Failed

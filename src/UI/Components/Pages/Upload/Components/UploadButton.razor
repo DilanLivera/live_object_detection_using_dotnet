@@ -17,23 +17,30 @@
                    class="hidden"
                    accept=".mp4"
                    OnChange="@OnFileSelected"
-                   disabled="@IsDisabled"/>
+                   disabled="@ShouldDisable"/>
     </label>
-    @if (VideoFile != null && !HasFailed)
+    @if (!HasFailed)
     {
         <span class="ml-3 text-gray-400">
-            @VideoFile.OriginalFileName (@Math.Round((double)VideoFile.SizeInBytes / (1024 * 1024), 1) MB) @(VideoDuration != null ? $@"- {VideoDuration.Value:hh\:mm\:ss}" : "")
+            @OriginalFileName @SizeInBytesString @(VideoDuration != null ? $@"- {VideoDuration.Value:hh\:mm\:ss}" : "")
         </span>
     }
 </div>
 
 @code {
+    private string SizeInBytesString => SizeInBytes.HasValue ? $"({Math.Round(SizeInBytes.Value / (1024 * 1024), 1)}MB)" : "";
 
     /// <summary>
-    /// The currently selected video file
+    /// Original file name.
     /// </summary>
     [Parameter]
-    public UploadedVideoFile? VideoFile { get; set; }
+    public string? OriginalFileName { get; set; }
+
+    /// <summary>
+    /// Size of the file in bytes.
+    /// </summary>
+    [Parameter]
+    public double? SizeInBytes { get; set; }
 
     /// <summary>
     /// Duration of the video if available
@@ -45,10 +52,10 @@
     /// Whether the input should be disabled
     /// </summary>
     [Parameter]
-    public bool IsDisabled { get; set; }
+    public bool ShouldDisable { get; set; }
 
     /// <summary>
-    /// Indicates if the upload has failed
+    /// Indicates if the object detection has failed
     /// </summary>
     [Parameter]
     public bool HasFailed { get; set; }

@@ -14,10 +14,10 @@ builder.Services
        .AddRazorComponents()
        .AddInteractiveServerComponents();
 
-
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-builder.Services.AddSingleton<UploadedVideoProcessor>();
+builder.Services.AddSingleton<VideoFileValidationService>();
+builder.Services.AddSingleton<VideoUploadOrchestrator>();
 
 builder.Services.AddHttpContextAccessor();
 
