@@ -5,303 +5,34 @@
 @inject FileService FileService
 @using System.Diagnostics
 @using UI.Infrastructure
+@using UI.Components.Pages.Upload.Components
 
 <div class="container mx-auto py-5 px-4">
     <div class="max-w-3xl mx-auto">
         <div class="space-y-4">
-            <h1 class="text-3xl font-bold tracking-tight"
-                id="page-title">
+            <h1 class="text-3xl font-bold tracking-tight">
                 Upload Video
             </h1>
+            <p class="text-gray-400">
+                Upload a video file to detect objects. Supported formats: MP4
+            </p>
         </div>
 
-        <div class="mt-6"
-             role="region"
-             aria-labelledby="upload-section-title">
-            <h2 id="upload-section-title"
-                class="sr-only">
-                Video Upload Section
-            </h2>
-            <div class="flex items-center">
-                <label for="videoUpload"
-                       class="inline-flex items-center px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-gray-900"
-                       aria-describedby="upload-help">
-                    <svg class="w-4 h-4 mr-2"
-                         aria-hidden="true"
-                         xmlns="http://www.w3.org/2000/svg"
-                         fill="none"
-                         viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/>
-                    </svg>
-                    @if (ShouldDisableInput())
-                    {
-                        <span>Processing...</span>
-                    }
-                    else
-                    {
-                        <span>Select Video</span>
-                    }
-                    <InputFile id="videoUpload"
-                               class="hidden"
-                               accept=".mp4"
-                               OnChange="@UploadFileAsync"
-                               disabled="@ShouldDisableInput()"
-                               aria-describedby="upload-help file-info"/>
-                </label>
-                @if (_videoFile != null && _objectDetectionState.Status != ObjectDetectionStatus.Failed)
-                {
-                    <div class="ml-3 text-gray-400"
-                         id="file-info"
-                         role="status"
-                         aria-live="polite">
-                        <span class="sr-only">Selected file:</span>
-                        @_videoFile.OriginalFileName (@Math.Round((double)_videoFile.SizeInBytes / (1024 * 1024), 1) MB) @(_objectDetectionState.VideoDuration != null ? $@"- Duration: {_objectDetectionState.VideoDuration.Value:hh\:mm\:ss}" : "")
-                    </div>
-                }
-            </div>
-            <div id="upload-help"
-                 class="text-sm text-gray-500 mt-2">
-                Choose an MP4 video file to analyze for object detection. Maximum file size: 100MB.
-            </div>
-        </div>
+        <UploadButton VideoFile="_videoFile"
+                      VideoDuration="_objectDetectionState.VideoDuration"
+                      IsDisabled="ShouldDisableInput()"
+                      HasFailed="_objectDetectionState.Status == ObjectDetectionStatus.Failed"
+                      OnFileSelected="UploadFileAsync"/>
 
-        <div class="mt-6 space-y-4"
-             role="region"
-             aria-labelledby="status-section-title"
-             aria-live="polite"
-             aria-atomic="false">
-            <h2 id="status-section-title"
-                class="sr-only">
-                Processing Status
-            </h2>
-            @if (_objectDetectionState.StatusMessages.Count > 0)
-            {
-                <div role="log"
-                     aria-label="Processing status updates">
-                    @foreach (StatusMessage message in _objectDetectionState.StatusMessages.Value)
-                    {
-                        <div class="p-4 m-4 @message.CssClass rounded-lg"
-                             role="status"
-                             aria-live="@(message.ShouldShowSpinner ? "assertive" : "polite")">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-3">
-                                    @if (message.ShouldShowSpinner)
-                                    {
-                                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-grey-500"
-                                             role="progressbar"
-                                             aria-label="Processing in progress"
-                                             aria-describedby="spinner-description">
-                                        </div>
-                                        <span id="spinner-description"
-                                              class="sr-only">
-                                            Loading animation indicating processing is in progress
-                                        </span>
-                                    }
-                                    <span class="@message.TextClass">
-                                        @message.Text
-                                    </span>
-                                </div>
-                                <time class="text-xs text-gray-500"
-                                      datetime="@message.CreatedAt.ToString("HH:mm:ss")"
-                                      aria-label="Status update time: @message.CreatedAt.ToString("HH:mm:ss")">
-                                    @message.CreatedAt.ToString(format: "HH:mm:ss")
-                                </time>
-                            </div>
-                            @if (message.ShouldShowProgress && message.Progress > 0)
-                            {
-                                <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2"
-                                     role="progressbar"
-                                     aria-valuenow="@((int)(message.Progress * 100))"
-                                     aria-valuemin="0"
-                                     aria-valuemax="100"
-                                     aria-label="Processing progress: @((int)(message.Progress * 100)) percent complete">
-                                    <div class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
-                                         style="width: @(message.Progress * 100)%">
-                                    </div>
-                                </div>
-                                <div class="sr-only"
-                                     aria-live="polite">
-                                    Progress: @((int)(message.Progress * 100))% complete
-                                </div>
-                            }
-                            @if (!string.IsNullOrEmpty(message.Details))
-                            {
-                                <div class="mt-2 text-sm @message.TextClass opacity-80"
-                                     role="note">
-                                    @message.Details
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            }
-        </div>
+        <ProcessingStatus StatusMessages="_objectDetectionState.StatusMessages.Value"/>
 
-        @if (_objectDetectionState.Status == ObjectDetectionStatus.Processed)
-        {
-            <div class="mt-6 p-4"
-                 role="region"
-                 aria-labelledby="results-title">
-                <div class="space-y-4">
-                    <h2 id="results-title"
-                        class="font-medium text-lg">
-                        Detection Results
-                    </h2>
-                    <p class="font-medium"
-                       role="status"
-                       aria-live="polite">
-                        Video processing complete: Found @_objectDetectionState.FrameResults.Sum(f => f.Detections.Length) total detections across @_objectDetectionState.TotalFrames frames (@Math.Round(_objectDetectionState.VideoFrameRate, digits: 0) fps).
-                    </p>
+        <DetectionResults IsProcessed="_objectDetectionState.Status == ObjectDetectionStatus.Processed"
+                          FrameResults="_objectDetectionState.FrameResults"
+                          TotalFrames="_objectDetectionState.TotalFrames"
+                          VideoFrameRate="_objectDetectionState.VideoFrameRate"/>
 
-                    @{
-                        var allDetections = _objectDetectionState.FrameResults
-                                                                 .SelectMany(frame => frame.Detections
-                                                                                           .Select(detection => new
-                                                                                                                {
-                                                                                                                    frame.FrameNumber,
-                                                                                                                    frame.Timestamp,
-                                                                                                                    Detection = detection
-                                                                                                                }))
-                                                                 .ToList();
-
-                        var detectionSummary = allDetections
-                                               .GroupBy(x => x.Detection.Label)
-                                               .Select(g => new { Label = g.Key, Count = g.Count(), MaxConfidence = g.Max(x => x.Detection.Confidence) })
-                                               .OrderByDescending(x => x.Count)
-                                               .ToList();
-
-                    }
-
-                    @if (allDetections.Any())
-                    {
-                        <div class="space-y-4">
-                            <div class="space-y-2"
-                                 role="region"
-                                 aria-labelledby="summary-title">
-                                <h3 id="summary-title"
-                                    class="font-medium">
-                                    Detection Summary:
-                                </h3>
-                                <div class="grid grid-cols-2 gap-2"
-                                     role="list"
-                                     aria-label="Object detection summary by type">
-                                    @foreach (var summary in detectionSummary)
-                                    {
-                                        <div class="p-2 bg-gray-800/20 border border-gray-600/20 rounded"
-                                             role="listitem"
-                                             aria-label="@summary.Label: @summary.Count detections, maximum confidence @Math.Round(summary.MaxConfidence * 100, 1) percent">
-                                            <div class="flex justify-between">
-                                                <span class="text-blue-300">
-                                                    @summary.Label
-                                                </span>
-                                                <span class="text-sm text-gray-400">
-                                                    @summary.Count detections (max: @Math.Round(summary.MaxConfidence * 100, 1)%)
-                                                </span>
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-
-                            <div class="space-y-2"
-                                 role="region"
-                                 aria-labelledby="frames-title">
-                                <h3 id="frames-title"
-                                    class="font-medium">
-                                    Detections per frame:
-                                </h3>
-                                <div class="max-h-96 overflow-y-auto space-y-2"
-                                     role="log"
-                                     aria-label="Frame by frame detection details">
-                                    @{
-                                        var frameGroups = allDetections.GroupBy(x => x.FrameNumber)
-                                                                       .OrderBy(g => g.Key)
-                                                                       .ToList();
-                                    }
-
-                                    @foreach (var frameGroup in frameGroups)
-                                    {
-                                        <div class="p-3 bg-gray-800/30 border border-gray-600/30 rounded-lg"
-                                             role="group"
-                                             aria-labelledby="frame-@frameGroup.Key-title">
-                                            <div class="mb-2 pb-2 border-b border-gray-600/30">
-                                                <span id="frame-@frameGroup.Key-title"
-                                                      class="font-medium text-gray-300">
-                                                    Frame @frameGroup.Key (@frameGroup.First().Timestamp.ToString(@"mm\:ss\.ff"))
-                                                </span>
-                                                <span class="ml-2 text-sm text-gray-400">
-                                                    @frameGroup.Count() detection@(frameGroup.Count() == 1 ? "" : "s")
-                                                </span>
-                                            </div>
-                                            <div class="space-y-1"
-                                                 role="list"
-                                                 aria-label="Detections in frame @frameGroup.Key">
-                                                @foreach (var detection in frameGroup.OrderByDescending(d => d.Detection.Confidence))
-                                                {
-                                                    <div class="flex items-center justify-between"
-                                                         role="listitem"
-                                                         aria-label="@detection.Detection.Label detected with @Math.Round(detection.Detection.Confidence * 100, 1) percent confidence at coordinates x @Math.Round(detection.Detection.BoundingBox.X, 0), y @Math.Round(detection.Detection.BoundingBox.Y, 0), width @Math.Round(detection.Detection.BoundingBox.Width, 0), height @Math.Round(detection.Detection.BoundingBox.Height, 0)">
-                                                        <div class="flex items-center space-x-2">
-                                                            <span class="font-medium text-blue-300">
-                                                                @detection.Detection.Label
-                                                            </span>
-                                                            <span class="text-xs text-gray-500"
-                                                                  aria-label="Bounding box coordinates">
-                                                                x: @Math.Round(detection.Detection.BoundingBox.X, 0), y: @Math.Round(detection.Detection.BoundingBox.Y, 0), w: @Math.Round(detection.Detection.BoundingBox.Width, 0), h: @Math.Round(detection.Detection.BoundingBox.Height, 0)
-                                                            </span>
-                                                        </div>
-                                                        <span class="text-sm font-medium text-green-300"
-                                                              aria-label="Confidence score">
-                                                            @Math.Round(detection.Detection.Confidence * 100, 1)%
-                                                        </span>
-                                                    </div>
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
-
-            @if (_objectDetectionState.Status == ObjectDetectionStatus.Processed)
-            {
-                <div class="mt-8 p-4 bg-gray-800/20 border border-gray-600/20 rounded-lg"
-                     role="region"
-                     aria-labelledby="video-title">
-                    <h2 id="video-title"
-                        class="font-medium text-lg mb-4">
-                        Processed Video
-                    </h2>
-                    <div class="space-y-4">
-                        <div class="relative rounded-lg overflow-hidden bg-black">
-                            <div class="relative aspect-video">
-                                <video id="processedVideo"
-                                       class="absolute top-0 left-0 w-full h-full object-contain"
-                                       controls
-                                       preload="metadata"
-                                       src="@GetVideoUrl()"
-                                       aria-label="Processed video with object detection overlays"
-                                       aria-describedby="video-description">
-                                    <p>Your browser does not support the video tag. Please use a modern browser to view the processed video.</p>
-                                </video>
-                                <div id="video-description"
-                                     class="sr-only">
-                                    The original video content.
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            }
-        }
+        <VideoPlayer IsProcessed="_objectDetectionState.Status == ObjectDetectionStatus.Processed"
+                     VideoUrl="@GetVideoUrl()"/>
     </div>
 </div>
 
@@ -405,9 +136,8 @@
 
     private string GetVideoUrl()
     {
-        Debug.Assert(_videoFile != null, "Video file should not be null when getting video URL");
-        Debug.Assert(!string.IsNullOrWhiteSpace(_videoFile.SavedFileName),
-                     "Video file saved filename should not be null or empty when getting video URL");
+        if (_videoFile == null || string.IsNullOrWhiteSpace(_videoFile.SavedFileName))
+            return string.Empty;
 
         return $"/api/video/{Uri.EscapeDataString(_videoFile.SavedFileName)}";
     }
