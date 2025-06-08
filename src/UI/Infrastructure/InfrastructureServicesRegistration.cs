@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Components.Server.Circuits;
-using UI.Infrastructure.ObjectDetection;
-using UI.Infrastructure.VideoProcessing;
+using UI.Infrastructure.ObjectDetectionModels;
 
 namespace UI.Infrastructure;
 
@@ -27,13 +26,11 @@ public static class InfrastructureServicesRegistration
 
         services.AddScoped<CircuitHandler, CircuitHandlerService>();
 
-        services.AddObjectDetection(configuration);
+        services.AddObjectDetectionModels(configuration);
 
         services.AddSingleton<FFmpegFrameExtractor>();
 
         services.AddSingleton<FileService>();
-
-        services.AddHostedService<FileCleanupService>();
 
         return services;
     }
