@@ -16,42 +16,12 @@ public sealed class ObjectDetectionState
     public StatusMessages StatusMessages { get; } = new();
 
     /// <summary>
-    /// Summary of detected objects across all frames
-    /// </summary>
-    public ObjectSummary[] DetectedObjects { get; private set; } = [];
-
-    /// <summary>
-    /// Individual detection results for each frame
-    /// </summary>
-    public FrameDetectionResult[] FrameResults { get; private set; } = [];
-
-    /// <summary>
-    /// Total number of frames that were processed
-    /// </summary>
-    public int TotalFrames { get; private set; }
-
-    /// <summary>
-    /// Duration of the processed video
-    /// </summary>
-    public TimeSpan? VideoDuration { get; private set; }
-
-    /// <summary>
-    /// Frame rate of the video (frames per second)
-    /// </summary>
-    public double VideoFrameRate { get; private set; }
-
-    /// <summary>
     /// Resets the state to initial values
     /// </summary>
     public void Reset()
     {
         Status = ObjectDetectionStatus.None;
         StatusMessages.Clear();
-        DetectedObjects = [];
-        FrameResults = [];
-        TotalFrames = 0;
-        VideoDuration = null;
-        VideoFrameRate = 0;
     }
 
     /// <summary>
@@ -101,12 +71,6 @@ public sealed class ObjectDetectionState
     public void SetComplete()
     {
         Status = ObjectDetectionStatus.Complete;
-        ProcessingProgress = 1.0;
-        DetectedObjects = videoFile.DetectedObjects;
-        FrameResults = videoFile.FrameResults;
-        TotalFrames = videoFile.TotalFrames;
-        VideoDuration = videoFile.Duration;
-        VideoFrameRate = videoFile.FrameRate;
         StatusMessages.AddProcessingComplete();
     }
 
