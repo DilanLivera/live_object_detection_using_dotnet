@@ -1,8 +1,10 @@
-using UI.Components;
 using Serilog;
 using UI;
-using UI.Components.Pages.Upload;
+using UI.Features.FileCleanup;
+using UI.Features.ObjectDetection;
+using UI.Features.VideoUpload;
 using UI.Infrastructure;
+using UI.Pages;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -16,8 +18,11 @@ builder.Services
 
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+builder.Services.AddSingleton<ObjectDetector>();
 builder.Services.AddSingleton<VideoFileValidationService>();
 builder.Services.AddSingleton<VideoUploadOrchestrator>();
+builder.Services.AddHostedService<FileCleanupService>();
+
 
 builder.Services.AddHttpContextAccessor();
 
